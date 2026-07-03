@@ -41,9 +41,11 @@ current="$(git describe --tags --always 2>/dev/null || echo unknown)"
 latest="$(git tag -l 'v*' --sort=-v:refname | head -1)"
 [[ -n "$latest" ]] || err "no release tags found on origin"
 
-cur_commit="$(git rev-parse HEAD)"
 tgt_commit="$(git rev-parse "${latest}^{commit}")"
-if [[ "$cur_commit" == "$tgt_commit" ]]; then
+# Up to date when HEAD already CONTAINS the latest release — i.e. HEAD is at the tag
+# or ahead of it (e.g. a dev build tracking main). A plain != check would wrongly
+# offer to "update" (downgrade) anyone ahead of the newest tag.
+if git merge-base --is-ancestor "$tgt_commit" HEAD 2>/dev/null; then
   log "already up to date (${current})"
   exit 0
 fi
