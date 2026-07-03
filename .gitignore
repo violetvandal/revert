@@ -79,3 +79,6 @@ tools/partymod/
 # Game-derived .qb/.ns work dirs
 tools/prx/modmenu-work/
 tools/prx/recompiler-grind/
+
+# Local config override (machine-specific; survives `revert update`)
+revert.conf.local

@@ -10,6 +10,7 @@
 #   revert build [--fast] [--only a,b]     build the edition (reproducible)
 #   revert run <vanilla|qol|online> [...]  launch a lane (--soundtrack, --glyphs)
 #   revert tag <image> [...]               make an in-game Create-A-Graphic tag
+#   revert update [--check]                update to the latest release + rebuild
 #
 # Architecture (see docs/ARCHITECTURE.md): a Go "build" core (thugkit) owns producing
 # the edition; bash owns launch + system setup. This dispatcher routes to both.
@@ -196,11 +197,19 @@ cmd_acquire_hq() {
   exec "$s" "$@"
 }
 
+# ---- update: pull the latest tagged release + rebuild --------------------------
+cmd_update() {
+  local s="${SHARE_DIR}/setup/revert-update.sh"
+  [[ -x "$s" ]] || err "revert-update.sh missing or not executable ($s)"
+  exec "$s" "$@"
+}
+
 case "${1:-help}" in
   doctor)            shift; cmd_doctor "$@";;
   setup)             shift; cmd_setup "$@";;
   acquire-game-data) shift; cmd_acquire "$@";;
   acquire-hq)        shift; cmd_acquire_hq "$@";;
+  update)            shift; cmd_update "$@";;
   build)             shift; cmd_build "$@";;
   run)               shift; cmd_run "$@";;
   tag)               shift; cmd_tag "$@";;

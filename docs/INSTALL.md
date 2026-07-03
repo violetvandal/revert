@@ -75,6 +75,20 @@ your supplied files. Re-running produces the same edition.
 ./revert run online                   # THUG Pro (after: ./revert setup --online)
 ```
 
+## 5. Updating
+```sh
+./revert update --check   # is a newer release available?
+./revert update           # update to the latest release + rebuild
+```
+`revert update` fetches the latest tagged release, moves the toolkit **and its pinned
+components** (thugkit + mods + NeverScript submodules) to that version, rebuilds thugkit,
+and re-runs `revert build` — **preserving your `Save/`** and never touching game data.
+
+Keep machine-specific settings (e.g. `HQ_*_URL`, `GLYPH_STYLE`, a custom `GE_DIR`) in a
+**`revert.conf.local`** file next to `revert.conf`. It's gitignored, sourced last (so it
+wins), and never conflicts on update — edit `revert.conf` directly only if you want to
+change a default for everyone.
+
 ## Troubleshooting
 - `./revert doctor` first — it pinpoints missing deps/prefixes/inputs.
 - Controller has no L2/R2/walk: ensure `python3-evdev` + `/dev/uinput` access (doctor warns).
