@@ -1,0 +1,6 @@
+[submodule "tools/thugkit"]
+	path = tools/thugkit
+	url = https://github.com/violetvandal/thugkit.git
+[submodule "mods"]
+	path = mods
+	url = https://github.com/violetvandal/revert-mods.git

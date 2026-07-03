@@ -34,13 +34,13 @@ out/
 backups/
 **/*.orig
 
+# mods/ and tools/thugkit/ are git submodules (see .gitmodules) — do NOT ignore.
+
 # Separate git repos (own history; not part of Revert)
-mods/
 thug2-tag-importer/
 thug2-skater-extractor/
 
 # External tool clones / upstream forks (not our code)
-tools/thugkit/
 tools/neverscript/
 tools/io_thps_scene/
 tools/partymod-src/

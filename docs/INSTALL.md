@@ -37,8 +37,26 @@ This produces the clean **pristine base** (`game-pristine-us/`) that builds deri
 Place these where `revert.conf` points, then build:
 - **no-CD executable** (`NOCD_EXE`) — the disc exe won't run under Wine (SafeDisc).
 - **WidescreenFix zip** (`WSFIX_ZIP`) — ThirteenAG's THUG2 WidescreenFix release.
-- **HQ Xbox A/V pack** (`HQ_AUDIO_PACK`) — optional higher-quality music/video.
 - Licensed brand decks / guest models live in gitignored `mods/src/*/blob/` (dev-only).
+
+### HQ packs — `revert acquire-hq`
+Two optional community/derivative packs sharpen the edition; Revert **does not host**
+them (they're game-derivative), but makes them easy to pull once you point it at a source:
+
+- **HQ Xbox audio/video** — higher-quality music + cutscene audio ripped from the Xbox release.
+- **HQ classic level textures** (CA/DJ/SC) — sharper level art.
+
+```sh
+./revert acquire-hq            # fetch both (or: audio | textures)
+```
+How it resolves each pack:
+1. If you set its URL in `revert.conf` (`HQ_AUDIO_URL` / `HQ_TEXTURES_URL`, plus an optional
+   `_SHA256` to verify), `acquire-hq` downloads it to the right place.
+2. If the URL is empty, it prints exactly where to **drop your own copy** — then you're done.
+
+Either way, the next `revert build` applies them automatically. The HQ-textures mod is
+`optional=true`, so a build simply **skips** it when the textures aren't present — nothing
+breaks if you don't have them.
 
 ## 3. Build the edition
 ```sh

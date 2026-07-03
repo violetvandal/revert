@@ -6,6 +6,7 @@
 #   revert doctor                          check prerequisites (read-only)
 #   revert setup                           install Wine/DXVK/controller + prefixes
 #   revert acquire-game-data --iso <p>     turn YOUR THUG2 copy into the pristine base
+#   revert acquire-hq [audio|textures]     fetch the optional HQ audio / textures packs
 #   revert build [--fast] [--only a,b]     build the edition (reproducible)
 #   revert run <vanilla|qol|online> [...]  launch a lane (--soundtrack, --glyphs)
 #   revert tag <image> [...]               make an in-game Create-A-Graphic tag
@@ -188,10 +189,18 @@ cmd_acquire() {
   err "acquire-game-data not implemented yet (Stage 4). See game-pristine-us/PRISTINE_README.txt for the manual recipe."
 }
 
+# ---- acquire-hq: fetch the optional HQ audio/textures packs (fetch or BYO) ------
+cmd_acquire_hq() {
+  local s="${SHARE_DIR}/setup/revert-acquire-hq.sh"
+  [[ -x "$s" ]] || err "revert-acquire-hq.sh missing or not executable ($s)"
+  exec "$s" "$@"
+}
+
 case "${1:-help}" in
   doctor)            shift; cmd_doctor "$@";;
   setup)             shift; cmd_setup "$@";;
   acquire-game-data) shift; cmd_acquire "$@";;
+  acquire-hq)        shift; cmd_acquire_hq "$@";;
   build)             shift; cmd_build "$@";;
   run)               shift; cmd_run "$@";;
   tag)               shift; cmd_tag "$@";;
