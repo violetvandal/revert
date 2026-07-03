@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Revert — THUG2: Violet Vandal Edition</title>
+<style>
+  :root {
+    --night:#0a0610; --surface:#17102a; --surface2:#1e1638; --line:#2a2044;
+    --grape:#a24bff; --grape-soft:#c79bff; --blood:#e83b5c; --bone:#f1eaf9; --ash:#a596c2;
+    --ok:#57d38c; --warn:#f5c518;
+  }
+  * { box-sizing:border-box; }
+  html,body { height:100%; margin:0; }
+  body {
+    background:
+      radial-gradient(60% 45% at 50% -8%, rgba(162,75,255,.18), transparent 60%),
+      linear-gradient(180deg,#0a0610,#0c0716 60%,#0a0610);
+    color:var(--bone); font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    display:flex; flex-direction:column; min-height:100%;
+  }
+  header { padding:20px 24px 8px; }
+  h1 { margin:0; font-size:20px; letter-spacing:.02em; text-transform:uppercase; font-weight:800; }
+  h1 .vv { color:var(--grape-soft); }
+  .sub { color:var(--ash); font-size:12.5px; margin-top:2px; }
+  .status { margin:10px 24px; padding:8px 12px; border:1px solid var(--line); border-radius:10px;
+    background:rgba(23,16,42,.5); font-size:12.5px; color:var(--ash); display:flex; gap:8px; align-items:center; }
+  .status b { color:var(--bone); font-weight:600; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--ash); flex:none; }
+  .dot.ok { background:var(--ok); } .dot.bad { background:var(--blood); }
+  main { display:grid; grid-template-columns:300px 1fr; gap:16px; padding:6px 24px 24px; flex:1; min-height:0; }
+  .steps { display:flex; flex-direction:column; gap:10px; overflow:auto; }
+  .card { border:1px solid var(--line); border-radius:12px; background:rgba(23,16,42,.55); padding:12px; }
+  .card h3 { margin:0 0 2px; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--grape-soft); }
+  .card p { margin:0 0 10px; font-size:12px; color:var(--ash); }
+  .card .controls { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
+  input[type=text], select { background:#120c22; color:var(--bone); border:1px solid var(--line);
+    border-radius:8px; padding:6px 8px; font-size:12.5px; flex:1; min-width:0; }
+  label.chk { font-size:12px; color:var(--ash); display:flex; gap:5px; align-items:center; cursor:pointer; }
+  button.act { width:100%; border:1px solid var(--grape); background:rgba(162,75,255,.14);
+    color:var(--grape-soft); font-weight:600; padding:8px 10px; border-radius:9px; cursor:pointer;
+    transition:.15s; font-size:13px; }
+  button.act:hover:not(:disabled) { background:rgba(162,75,255,.28); color:var(--bone); }
+  button.act:disabled { opacity:.4; cursor:not-allowed; }
+  .console { border:1px solid var(--line); border-radius:12px; background:#070410; display:flex; flex-direction:column; min-height:0; }
+  .console .bar { display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid var(--line); font-size:12px; color:var(--ash); }
+  .console .bar .run { color:var(--grape-soft); font-weight:600; }
+  .console .bar .spacer { flex:1; }
+  .console pre { margin:0; padding:12px 14px; overflow:auto; flex:1; font:12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;
+    color:#d7cdea; white-space:pre-wrap; word-break:break-word; }
+  .console pre .cmd { color:var(--grape-soft); }
+  .console pre .err { color:var(--blood); }
+  .badge { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); }
+  .badge.run { color:var(--warn); border-color:rgba(245,197,24,.4); }
+  .badge.ok  { color:var(--ok);  border-color:rgba(87,211,140,.4); }
+  .badge.bad { color:var(--blood); border-color:rgba(232,59,92,.4); }
+  @media (max-width:760px){ main{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Revert <span class="vv">·</span> THUG2: Violet Vandal Edition</h1>
+    <div class="sub">One front door for the definitive, modernized THUG2. Ships tooling, never game data — bring your own copy.</div>
+  </header>
+
+  <div class="status">
+    <span class="dot" id="rootDot"></span>
+    <span>toolkit root:</span> <b id="rootPath">…</b>
+  </div>
+
+  <main>
+    <section class="steps" id="steps">
+      <div class="card">
+        <h3>1 · Doctor</h3><p>Check prerequisites (read-only).</p>
+        <button class="act" data-cmd="doctor">Run doctor</button>
+      </div>
+      <div class="card">
+        <h3>2 · Setup</h3><p>Install Wine/DXVK/controller + prefixes.</p>
+        <button class="act" data-cmd="setup">Run setup</button>
+      </div>
+      <div class="card">
+        <h3>3 · Game data</h3><p>Turn your own THUG2 copy into the pristine base.</p>
+        <div class="controls"><input type="text" id="gamePath" placeholder="/path/to/your/THUG2 folder" /></div>
+        <button class="act" data-cmd="acquire-game-data" data-args="folder">Acquire game data</button>
+      </div>
+      <div class="card">
+        <h3>4 · Build</h3><p>Build the edition (reproducible).</p>
+        <div class="controls"><label class="chk"><input type="checkbox" id="fast" /> fast rebuild</label></div>
+        <button class="act" data-cmd="build" data-args="fast">Build edition</button>
+      </div>
+      <div class="card">
+        <h3>5 · Play</h3><p>Launch a lane.</p>
+        <div class="controls">
+          <select id="lane"><option value="qol">QOL-Modded</option><option value="vanilla">Vanilla</option><option value="online">Online (THUG Pro)</option></select>
+        </div>
+        <button class="act" data-cmd="run" data-args="lane">Play</button>
+      </div>
+      <div class="card">
+        <h3>⟳ · Update</h3><p>Update to the latest release + rebuild.</p>
+        <button class="act" data-cmd="update" data-args="check">Check for updates</button>
+      </div>
+    </section>
+
+    <section class="console">
+      <div class="bar">
+        <span class="run" id="running">idle</span>
+        <span class="spacer"></span>
+        <span class="badge" id="badge" style="display:none"></span>
+        <button class="act" id="clear" style="width:auto;padding:3px 10px;font-size:11px">clear</button>
+      </div>
+      <pre id="log"><span class="cmd">Ready. Pick a step on the left — output streams here live.</span>
+</pre>
+    </section>
+  </main>
+
+<script>
+const log = document.getElementById('log');
+const running = document.getElementById('running');
+const badge = document.getElementById('badge');
+let es = null;
+
+function append(text, cls) {
+  const span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = text + "\n";
+  log.appendChild(span);
+  log.parentElement.scrollTop = log.parentElement.scrollHeight;
+}
+function setBusy(b) {
+  document.querySelectorAll('button.act[data-cmd]').forEach(x => x.disabled = b);
+  running.textContent = b ? 'running…' : 'idle';
+}
+
+function argsFor(btn) {
+  const spec = btn.dataset.args || '';
+  const out = [];
+  if (spec === 'folder') { const p = document.getElementById('gamePath').value.trim(); if (p) { out.push('--folder', p); } }
+  if (spec === 'fast' && document.getElementById('fast').checked) out.push('--fast');
+  if (spec === 'lane') out.push(document.getElementById('lane').value);
+  if (spec === 'check') out.push('--check');
+  return out;
+}
+
+function run(cmd, args) {
+  if (es) es.close();
+  badge.style.display = 'none';
+  setBusy(true);
+  const qs = new URLSearchParams(); qs.set('cmd', cmd);
+  args.forEach(a => qs.append('arg', a));
+  es = new EventSource('/api/stream?' + qs.toString());
+  es.addEventListener('start', e => append('$ ' + e.data, 'cmd'));
+  es.addEventListener('log', e => append(e.data));
+  es.addEventListener('error', e => append(e.data || '(stream error)', 'err'));
+  es.addEventListener('done', e => {
+    es.close(); es = null; setBusy(false);
+    const ok = e.data === '0';
+    badge.style.display = 'inline-block';
+    badge.className = 'badge ' + (ok ? 'ok' : 'bad');
+    badge.textContent = ok ? 'done ✓' : ('exit ' + e.data);
+    append(ok ? '— done —' : '— failed (exit ' + e.data + ') —', ok ? 'cmd' : 'err');
+  });
+  es.onerror = () => { if (es) { es.close(); es = null; } setBusy(false); };
+}
+
+document.querySelectorAll('button.act[data-cmd]').forEach(btn => {
+  btn.addEventListener('click', () => run(btn.dataset.cmd, argsFor(btn)));
+});
+document.getElementById('clear').addEventListener('click', () => { log.textContent = ''; badge.style.display='none'; });
+
+fetch('/api/info').then(r => r.json()).then(info => {
+  document.getElementById('rootPath').textContent = info.root;
+  document.getElementById('rootDot').className = 'dot ' + (info.revertFound ? 'ok' : 'bad');
+  if (!info.revertFound) append('⚠ revert dispatcher not found under ' + info.root, 'err');
+}).catch(() => {});
+</script>
+</body>
+</html>

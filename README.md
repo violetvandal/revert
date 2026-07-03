@@ -27,6 +27,10 @@ soundtrack (stream-safe). `revert tag <image>` imports a custom Create-A-Graphic
 (Xbox / PlayStation / GameCube / keyboard; `auto` picks Xbox on Steam Deck). You can also
 change it in-game under **Game Options → MOD OPTIONS → Button Glyphs**.
 
+**Prefer clicking to typing?** `cd gui && go build -o revert-gui . && ./revert-gui` opens a
+small local web UI that runs the same lifecycle (doctor/setup/build/run/update) with a
+live output console — see [gui/README.md](gui/README.md).
+
 See [docs/INSTALL.md](docs/INSTALL.md) for the full setup,
 [docs/STEAMDECK.md](docs/STEAMDECK.md) for the Steam Deck lane,
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it's built.
@@ -37,6 +41,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for the full setup,
 - `share/` — bash planes (`run/`, `setup/`) + shippable assets (controller, hudfix, tags)
 - `tools/thugkit/` — the Go build/apply core (own repo)
 - `mods/` — the mod source-of-truth (own repo)
+- `gui/` — optional web-UI installer (pure Go, wraps the CLI — zero native deps)
 
 > Revert never ships THUG2 game files, no-CD executables, or licensed/derivative
 > packs. You must own the game; some optional content (HQ A/V, brand decks) is

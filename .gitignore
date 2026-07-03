@@ -82,3 +82,6 @@ tools/prx/recompiler-grind/
 
 # Local config override (machine-specific; survives `revert update`)
 revert.conf.local
+
+# GUI installer build output
+gui/revert-gui
