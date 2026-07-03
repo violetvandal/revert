@@ -1,0 +1,57 @@
+Windows Registry Editor Version 5.00
+
+; THUG2: Violet Vandal Edition — Steam Deck controller binding (player 1)
+; gp0_* = gamepad map for Steam Input's emulated Xbox pad; k0_* = keyboard map
+; (the pad-bridge emits KP1/KP7/KP9 for get-off/nollie/switch). pad0 (device GUID)
+; is written separately by revert setup via the live pad probe — do NOT hardcode it.
+; L3/R3 (gp0_18/gp0_13) account for the Deck pad's extra Guide button.
+
+[HKEY_CURRENT_USER\Software\Activision\Tony Hawk's Underground 2\Settings]
+"gp0_0"=dword:00000002
+"gp0_1"=dword:00000002
+"gp0_2"=dword:00000001
+"gp0_3"=dword:00000001
+"gp0_4"=dword:00000007
+"gp0_5"=dword:00000007
+"gp0_6"=dword:00000006
+"gp0_7"=dword:00000006
+"gp0_8"=dword:0000000b
+"gp0_9"=dword:0000000c
+"gp0_10"=dword:0000000d
+"gp0_11"=dword:0000000e
+"gp0_12"=dword:00000012
+"gp0_13"=dword:00000015
+"gp0_14"=dword:00000000
+"gp0_15"=dword:00000000
+"gp0_16"=dword:00000000
+"gp0_17"=dword:00000000
+"gp0_18"=dword:00000014
+"gp0_19"=dword:00000000
+"gp0_20"=dword:00000005
+"gp0_21"=dword:00000005
+"gp0_22"=dword:00000004
+"gp0_23"=dword:00000004
+"k0_0"=dword:00000011
+"k0_1"=dword:0000001f
+"k0_2"=dword:0000001e
+"k0_3"=dword:00000020
+"k0_4"=dword:0000002c
+"k0_5"=dword:0000002d
+"k0_6"=dword:0000002e
+"k0_7"=dword:0000002f
+"k0_8"=dword:00000050
+"k0_9"=dword:0000004d
+"k0_10"=dword:0000004b
+"k0_11"=dword:00000048
+"k0_12"=dword:0fffffff
+"k0_13"=dword:0000000f
+"k0_14"=dword:0000004f
+"k0_15"=dword:00000051
+"k0_16"=dword:00000047
+"k0_17"=dword:00000049
+"k0_18"=dword:00000052
+"k0_19"=dword:00000053
+"k0_20"=dword:000000c7
+"k0_21"=dword:000000cf
+"k0_22"=dword:000000d3
+"k0_23"=dword:000000d1

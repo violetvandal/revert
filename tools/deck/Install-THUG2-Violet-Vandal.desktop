@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Install — THUG2: Violet Vandal Edition
+Comment=One-time Steam Deck setup (wine, 32-bit libs, prefix, controller, Steam shortcut)
+# Double-click from the file manager (Dolphin) so you never have to type the command.
+# Runs in a terminal so you can enter your sudo password — keep STEAM OPEN so the
+# Steam+X on-screen keyboard is available for that prompt.
+Exec=konsole --noclose -e bash -lc 'cd "$HOME/thug2" && ./revert setup'
+Icon=input-gaming
+Terminal=false
+Categories=Game;

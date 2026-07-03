@@ -1,0 +1,81 @@
+# Violet Vandal "Revert" toolkit — LOCAL repo (no remote/push).
+# NEVER track game data, disc images, installs, or external clones.
+
+# Game installs & rips (rebuildable, huge, copyrighted)
+game-*/
+iso_extracted*/
+clean-rip/
+THUG2/
+THUG2_Win_ROM_EN/
+Tony*/
+Tony-Hawk*/
+THUG2-US-personal-backup*/
+pc-tony*/
+Custom Skater Renders/
+thug2-linux-installer/
+
+# Disc images / archives / big blobs / game binaries
+*.iso
+*.zip
+*.7z
+*.tar.zst
+*.tar.gz
+*.tar.xz
+*.sha256
+*.pdf
+*.exe
+*.dll
+*.ico
+*.url
+
+# Logs & scratch
+*.log
+out/
+backups/
+**/*.orig
+
+# Separate git repos (own history; not part of Revert)
+mods/
+thug2-tag-importer/
+thug2-skater-extractor/
+
+# External tool clones / upstream forks (not our code)
+tools/thugkit/
+tools/neverscript/
+tools/io_thps_scene/
+tools/partymod-src/
+tools/leonblade-qb/
+tools/wsfp-src/
+tools/wsfix/
+
+# Generated / large tool outputs & art payloads
+tools/save/renders/
+tools/save/grf_work/
+tools/save/io_thps_scene/
+tools/save/stickers/
+tools/bink/rad/
+tools/bink/radio/bik/
+
+# Revert build cache (extracted HQ pack etc.)
+.revert-cache/
+__pycache__/
+*.pyc
+
+# --- Housekeeping 2026-07-03: exclude local config, game-derived assets & third-party bins ---
+# Local Claude Code config (machine-specific; may hold local paths)
+.claude/
+# Game-derived HQ texture pack (~1GB, copyrighted)
+tools/xbox_hq/
+# Bink scratch/work (TGA/wav intermediates)
+tools/bink/work/
+# Royalty-free radio: source audio + compiled variants (bulky/rebuildable; bik/ already ignored)
+tools/bink/radio/src/
+tools/bink/radio/variants/
+# Third-party binaries (not our code)
+tools/upscale/realesrgan-ncnn-vulkan-*
+tools/partymod/
+# Diagnostic .asi binaries (compiled; shipped hudfix/glyphfix already tracked)
+*.asi
+# Game-derived .qb/.ns work dirs
+tools/prx/modmenu-work/
+tools/prx/recompiler-grind/

@@ -1,0 +1,31 @@
+playlist_tracks_radio = [
+    {band="Violet Vandal Radio" track_title="Bit Shift" genre=2 path="music\\vag\\songs\\VVR_Bit_Shift"} 
+    {band="Violet Vandal Radio" track_title="Burnt Spirit" genre=2 path="music\\vag\\songs\\VVR_Burnt_Spirit"} 
+    {band="Violet Vandal Radio" track_title="Crossing the Chasm" genre=2 path="music\\vag\\songs\\VVR_Crossing_the_Chasm"} 
+    {band="Violet Vandal Radio" track_title="Digya" genre=2 path="music\\vag\\songs\\VVR_Digya"} 
+    {band="Violet Vandal Radio" track_title="Disco con Tutti" genre=2 path="music\\vag\\songs\\VVR_Disco_con_Tutti"} 
+    {band="Violet Vandal Radio" track_title="Electrodoodle" genre=2 path="music\\vag\\songs\\VVR_Electrodoodle"} 
+    {band="Violet Vandal Radio" track_title="Exit the Premises" genre=2 path="music\\vag\\songs\\VVR_Exit_the_Premises"} 
+    {band="Violet Vandal Radio" track_title="Five Armies" genre=2 path="music\\vag\\songs\\VVR_Five_Armies"} 
+    {band="Violet Vandal Radio" track_title="Funkorama" genre=1 path="music\\vag\\songs\\VVR_Funkorama"} 
+    {band="Violet Vandal Radio" track_title="Hard Boiled" genre=2 path="music\\vag\\songs\\VVR_Hard_Boiled"} 
+    {band="Violet Vandal Radio" track_title="Hep Cats" genre=1 path="music\\vag\\songs\\VVR_Hep_Cats"} 
+    {band="Violet Vandal Radio" track_title="Hot Pursuit" genre=0 path="music\\vag\\songs\\VVR_Hot_Pursuit"} 
+    {band="Violet Vandal Radio" track_title="Industrial Revolution" genre=2 path="music\\vag\\songs\\VVR_Industrial_Revolution"} 
+    {band="Violet Vandal Radio" track_title="Itty Bitty 8 Bit" genre=2 path="music\\vag\\songs\\VVR_Itty_Bitty_8_Bit"} 
+    {band="Violet Vandal Radio" track_title="Killers" genre=0 path="music\\vag\\songs\\VVR_Killers"} 
+    {band="Violet Vandal Radio" track_title="Killing Time" genre=2 path="music\\vag\\songs\\VVR_Killing_Time"} 
+    {band="Violet Vandal Radio" track_title="Mechanolith" genre=2 path="music\\vag\\songs\\VVR_Mechanolith"} 
+    {band="Violet Vandal Radio" track_title="Monkeys Spinning Monkeys" genre=0 path="music\\vag\\songs\\VVR_Monkeys_Spinning_Monkeys"} 
+    {band="Violet Vandal Radio" track_title="Pixelland" genre=2 path="music\\vag\\songs\\VVR_Pixelland"} 
+    {band="Violet Vandal Radio" track_title="Rocket" genre=2 path="music\\vag\\songs\\VVR_Rocket"} 
+    {band="Violet Vandal Radio" track_title="Run Amok" genre=1 path="music\\vag\\songs\\VVR_Run_Amok"} 
+    {band="Violet Vandal Radio" track_title="Severe Tire Damage" genre=0 path="music\\vag\\songs\\VVR_Severe_Tire_Damage"} 
+    {band="Violet Vandal Radio" track_title="Sneaky Snitch" genre=1 path="music\\vag\\songs\\VVR_Sneaky_Snitch"} 
+    {band="Violet Vandal Radio" track_title="Space Jazz" genre=1 path="music\\vag\\songs\\VVR_Space_Jazz"} 
+    {band="Violet Vandal Radio" track_title="Spazzmatica Polka" genre=0 path="music\\vag\\songs\\VVR_Spazzmatica_Polka"} 
+    {band="Violet Vandal Radio" track_title="Stormfront" genre=2 path="music\\vag\\songs\\VVR_Stormfront"} 
+    {band="Violet Vandal Radio" track_title="The Descent" genre=2 path="music\\vag\\songs\\VVR_The_Descent"} 
+    {band="Violet Vandal Radio" track_title="Volatile Reaction" genre=2 path="music\\vag\\songs\\VVR_Volatile_Reaction"} 
+    {band="Violet Vandal Radio" track_title="Voltaic" genre=2 path="music\\vag\\songs\\VVR_Voltaic"} 
+] 

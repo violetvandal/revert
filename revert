@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+#
+# revert — unified front door for THUG2: Violet Vandal Edition ("Revert" toolkit).
+#
+# One command for the whole lifecycle:
+#   revert doctor                          check prerequisites (read-only)
+#   revert setup                           install Wine/DXVK/controller + prefixes
+#   revert acquire-game-data --iso <p>     turn YOUR THUG2 copy into the pristine base
+#   revert build [--fast] [--only a,b]     build the edition (reproducible)
+#   revert run <vanilla|qol|online> [...]  launch a lane (--soundtrack, --glyphs)
+#   revert tag <image> [...]               make an in-game Create-A-Graphic tag
+#
+# Architecture (see docs/ARCHITECTURE.md): a Go "build" core (thugkit) owns producing
+# the edition; bash owns launch + system setup. This dispatcher routes to both.
+# Config lives in revert.conf (single source of truth).
+#
+# NOTE: Revert ships TOOLING, never game data — you must own THUG2.
+#
+set -euo pipefail
+
+REVERT_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+export REVERT_ROOT
+CONF="${REVERT_ROOT}/revert.conf"
+[[ -f "$CONF" ]] || { echo "revert: missing config: $CONF" >&2; exit 1; }
+# shellcheck disable=SC1090
+source "$CONF"
+
+c_blue=$'\033[1;34m'; c_red=$'\033[1;31m'; c_grn=$'\033[1;32m'; c_dim=$'\033[2m'; c_off=$'\033[0m'
+log()  { printf '%s[revert]%s %s\n' "$c_blue" "$c_off" "$*"; }
+err()  { printf '%s[revert:error]%s %s\n' "$c_red" "$c_off" "$*" >&2; exit 1; }
+ok()   { printf '  %s✓%s %s\n' "$c_grn" "$c_off" "$*"; }
+bad()  { printf '  %s✗%s %s\n' "$c_red" "$c_off" "$*"; }
+note() { printf '  %s· %s%s\n' "$c_dim" "$*" "$c_off"; }
+
+usage() {
+  sed -n '3,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  exit "${1:-0}"
+}
+
+# ---- doctor: read-only prerequisite checks -------------------------------------
+cmd_doctor() {
+  local fail=0
+  log "Revert doctor — checking prerequisites"
+  echo "Wine runtime:"
+  [[ -x "$GE_DIR/bin/wine" ]] && ok "GE-Proton ($GE_DIR)" || { bad "GE-Proton missing: $GE_DIR"; fail=1; }
+  [[ -d "$PREFIX_MAIN" ]]   && ok "main prefix ($PREFIX_MAIN)"   || note "main prefix not created yet (run: revert setup)"
+  [[ -d "$PREFIX_ONLINE" ]] && ok "online prefix ($PREFIX_ONLINE)" || note "online prefix not created (THUG Pro lane)"
+
+  echo "Build toolchain:"
+  if [[ -x "$THUGKIT" ]]; then
+    local _tkout; _tkout="$("$THUGKIT" 2>&1 || true)"
+    if printf '%s' "$_tkout" | grep -q build; then
+      ok "thugkit binary has 'build'"
+    else
+      note "thugkit present but no 'build' subcommand yet (rebuild: revert build)"
+    fi
+  else
+    command -v go >/dev/null && note "thugkit not built yet (will build from source)" || { bad "no thugkit binary and no go toolchain"; fail=1; }
+  fi
+  command -v python3 >/dev/null && ok "python3 (optional CAS asset steps)" || note "python3 absent (panty/sticker CAS steps skipped)"
+
+  echo "Controller:"
+  python3 -c 'import evdev' 2>/dev/null && ok "python3-evdev (trigger bridge)" || note "python3-evdev absent (L2/R2 bridge unavailable)"
+  [[ -w /dev/uinput ]] && ok "/dev/uinput writable" || note "/dev/uinput not writable (bridge needs ACL; see revert setup)"
+
+  echo "Game data (you must own THUG2):"
+  [[ -d "$PRISTINE_DIR/Data/pre" ]] && ok "pristine base ($PRISTINE_DIR)" || note "no pristine base yet (run: revert acquire-game-data)"
+  [[ -f "$NOCD_EXE" ]]   && ok "no-CD exe present" || note "no-CD THUG2.exe not present (user-supplied)"
+  [[ -f "$WSFIX_ZIP" ]]  && ok "WidescreenFix zip present" || note "WidescreenFix zip not present (user-supplied)"
+  [[ -f "$HQ_AUDIO_PACK" ]] && ok "HQ audio pack present" || note "HQ audio pack not present (optional, user-supplied)"
+
+  echo
+  (( fail )) && err "doctor found blocking issues above" || log "doctor: ready (notes above are optional/next-step)"
+}
+
+# ---- build: produce the edition ------------------------------------------------
+# Go core (thugkit build) does the portable, zero-dep work; this bash wrapper does
+# the archive extraction (7z) + the optional Python CAS asset post-pass. Supersedes
+# rebuild-playable.sh (kept as share/legacy reference).
+ensure_thugkit() {
+  [[ -x "$THUGKIT" ]] && "$THUGKIT" 2>&1 | grep -q build && return 0
+  command -v go >/dev/null || err "no thugkit binary with 'build', and no go toolchain to build it"
+  log "building thugkit (Go core)"
+  ( cd "$(dirname "$THUGKIT")" && go build -o "$(basename "$THUGKIT")" ./cmd/thugkit ) || err "thugkit build failed"
+}
+
+# Python CAS asset post-pass — the steps that live outside the .ns pipeline and Go
+# core (texture recolours, licensed model/deck blobs, stickers). Presence-gated;
+# never required for a clean build. Mirrors rebuild-playable.sh apply_cas_asset_mods.
+cas_post_pass() {  # $1 = edition dir
+  local dir="$1" save="${REVERT_ROOT}/tools/save"
+  command -v python3 >/dev/null || { note "python3 absent — skipping CAS asset post-pass"; return 0; }
+  log "CAS asset post-pass (python)"
+  python3 "$save/apply_panty_color.py" "$dir" 130 50 190 || true
+  [[ -d "$DECKS_BLOB" ]]  && python3 "$save/apply_deck_pack.py" "$dir" "$DECKS_BLOB" || true
+  [[ -d "$PLAYAS_BLOB" ]] && python3 "$save/apply_playas_models.py" "$dir" "$PLAYAS_BLOB" || true
+  [[ -d "$save/stickers" ]] && python3 "$save/apply_stickers.py" "$dir" || true
+}
+
+# Install the edition's in-game movies (Skatepark Project credits + the MOD OPTIONS
+# donation card) into the build. Prebuilt .bik (made from the source mp4 via
+# tools/bink/encode_video_bik.sh) so the build needs no Wine/RAD. Presence-gated.
+install_credits_movies() {  # $1 = edition dir
+  local dir="$1" src="${REVERT_ROOT}/tools/bink/credits" f moved=0
+  [[ -d "$src" && -d "$dir/Data/movies/bik" ]] || return 0
+  for f in "$src"/*.bik; do
+    [[ -e "$f" ]] || continue
+    cp -f "$f" "$dir/Data/movies/bik/$(basename "$f")" && moved=1
+  done
+  (( moved )) && log "installed credits movies -> Data/movies/bik/"
+  return 0
+}
+
+cmd_build() {
+  local fast="" lane="qol"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --fast) fast="--fast"; shift;;
+      --lane) lane="${2:-qol}"; shift 2;;
+      --only) BUILD_ONLY="$2"; shift 2;;
+      *) shift;;
+    esac
+  done
+  ensure_thugkit
+
+  local edition; case "$lane" in
+    qol)     edition="$EDITION_QOL";;
+    vanilla) edition="$EDITION_VANILLA";;
+    *) err "unknown lane '$lane' (use: qol | vanilla)";;
+  esac
+  [[ -d "$PRISTINE_DIR/Data/pre" ]] || err "no pristine base ($PRISTINE_DIR) — run: revert acquire-game-data"
+
+  # Full build: extract the HQ audio pack (7z) to a cache, excluding pcm.* (keeps PC dialog).
+  local hq_arg=()
+  if [[ -z "$fast" && -f "$HQ_AUDIO_PACK" ]]; then
+    if command -v 7z >/dev/null; then
+      local cache="${REVERT_ROOT}/.revert-cache/hq-audio"
+      if [[ ! -d "$cache/Game/Data/streams" ]]; then
+        log "extracting HQ audio pack (7z, excluding pcm.*)"
+        mkdir -p "$cache"
+        7z x -y -o"$cache" "$HQ_AUDIO_PACK" -x'!*pcm.wad' -x'!*pcm.dat' >/dev/null || err "7z extract failed"
+      fi
+      hq_arg=(--hq-audio "$cache")
+    else
+      note "7z not found — skipping HQ audio overlay"
+    fi
+  fi
+
+  local only_arg=(); [[ -n "${BUILD_ONLY:-}" ]] && only_arg=(--only "$BUILD_ONLY")
+  local wsfix_arg=(); [[ -f "$WSFIX_ZIP" ]] && wsfix_arg=(--wsfix "$WSFIX_ZIP")
+  local nocd_arg=();  [[ -f "$NOCD_EXE" ]] && nocd_arg=(--no-cd "$NOCD_EXE")
+  local hud_arg=();   [[ -f "$HUDFIX_ASI" ]] && hud_arg=(--hudfix "$HUDFIX_ASI")
+  local glyph_arg=(); [[ -f "${GLYPHFIX_ASI:-}" ]] && glyph_arg=(--glyphfix "$GLYPHFIX_ASI")
+  local tags_arg=();  [[ -d "$TAGS_DIR" ]] && tags_arg=(--tags "$TAGS_DIR")
+
+  log "build lane=$lane${fast:+ (fast)} -> $edition"
+  "$THUGKIT" build "$edition" --pristine "$PRISTINE_DIR" --mods "$MODS_DIR" \
+    $fast "${nocd_arg[@]}" "${wsfix_arg[@]}" "${hq_arg[@]}" "${hud_arg[@]}" \
+    "${glyph_arg[@]}" "${tags_arg[@]}" "${only_arg[@]}" || err "thugkit build failed"
+
+  cas_post_pass "$edition"
+  install_credits_movies "$edition"
+  log "build done. Play: revert run $lane"
+}
+
+# ---- run: launch a lane (config-driven, share/run/revert-run.sh) ---------------
+cmd_run() {
+  local r="${SHARE_DIR}/run/revert-run.sh"
+  [[ -x "$r" ]] || err "launcher missing: $r"
+  exec "$r" "$@"
+}
+
+# ---- tag: passthrough to the Go tool ------------------------------------------
+cmd_tag() {
+  [[ -x "$THUGKIT" ]] || err "thugkit binary missing ($THUGKIT) — run a build first"
+  exec "$THUGKIT" tag "$@"
+}
+
+# ---- stubs (implemented in later stages) --------------------------------------
+cmd_setup() {
+  local s="${SHARE_DIR}/setup/revert-setup.sh"
+  [[ -x "$s" ]] && exec "$s" "$@"
+  err "revert-setup.sh not present yet (Stage 2). Legacy reference: ${REVERT_ROOT}/install.sh"
+}
+cmd_acquire() {
+  local s="${SHARE_DIR}/setup/revert-acquire.sh"
+  [[ -x "$s" ]] && exec "$s" "$@"
+  err "acquire-game-data not implemented yet (Stage 4). See game-pristine-us/PRISTINE_README.txt for the manual recipe."
+}
+
+case "${1:-help}" in
+  doctor)            shift; cmd_doctor "$@";;
+  setup)             shift; cmd_setup "$@";;
+  acquire-game-data) shift; cmd_acquire "$@";;
+  build)             shift; cmd_build "$@";;
+  run)               shift; cmd_run "$@";;
+  tag)               shift; cmd_tag "$@";;
+  help|-h|--help)    usage 0;;
+  *) echo "revert: unknown command '${1:-}'" >&2; usage 1;;
+esac
