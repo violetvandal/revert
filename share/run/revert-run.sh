@@ -75,14 +75,46 @@ export WINEDEBUG="-all"
 export PATH="$GE_DIR/bin:$PATH"
 [[ -n "$LANE_ENV" ]] && export "${LANE_ENV?}"   # e.g. WINEDLLOVERRIDES=mscoree=b
 
+# Force builtin dinput8 on the main lanes so DirectInput enumerates the gamepad. A
+# native dinput8 (e.g. from an old `winetricks dinput8`) silently kills pad detection
+# for THUG2. Self-heals prefixes not yet re-run through `revert setup`. Only names
+# dinput8, so the registry winmm=native,builtin (WSFix) override still applies.
+if [[ "$PREFIX" == "$PREFIX_MAIN" ]]; then
+  export WINEDLLOVERRIDES="dinput8=b${WINEDLLOVERRIDES:+;$WINEDLLOVERRIDES}"
+fi
+
 # button-glyph style for VV.GlyphFix.asi (xbox/playstation/gamecube/keyboard)
 VV_GLYPHS="$(resolve_glyphs "$GLYPHS")"; export VV_GLYPHS
 log "button glyphs -> $VV_GLYPHS$( [[ "$GLYPHS" == auto ]] && is_steam_deck && echo ' (Steam Deck)')"
 
 # hooks ------------------------------------------------------------------------
+# Only the main prefix (vanilla/qol) gets wineserver management — the online lane
+# hands off to THUG Pro's own launcher and must not have its server torn down.
 bridge_pid=""
-cleanup() { [[ -n "$bridge_pid" ]] && kill "$bridge_pid" 2>/dev/null || true; }
+MANAGE_SERVER=0; [[ "$PREFIX" == "$PREFIX_MAIN" ]] && MANAGE_SERVER=1
+
+cleanup() {
+  [[ -n "$bridge_pid" ]] && kill "$bridge_pid" 2>/dev/null || true
+  pkill -f 'thug2-trigger-bridge.py' 2>/dev/null || true
+  pkill -f 'thug2-pad-mirror.py'     2>/dev/null || true
+  # Settle the wineserver so the NEXT launch starts on a clean server. A server left
+  # running with the game's stale input state is what makes a relaunch hang at boot
+  # or come up with a dead controller.
+  (( MANAGE_SERVER )) && timeout 15 "$GE_DIR/bin/wineserver" -w 2>/dev/null
+  return 0
+}
 trap cleanup EXIT
+
+# Clear leftovers from a previous session BEFORE launching (e.g. a game that didn't
+# exit cleanly, or an orphaned input bridge) — otherwise wineserver contention makes
+# the relaunch hang / lose the pad. Match THUG2.exe EXACTLY; never `pkill -f THUG2`
+# (that would also match this launcher's own command line and kill ourselves).
+if (( MANAGE_SERVER )); then
+  pkill -9 -x THUG2.exe 2>/dev/null || true
+  pkill -f 'thug2-trigger-bridge.py' 2>/dev/null || true
+  pkill -f 'thug2-pad-mirror.py'     2>/dev/null || true
+  timeout 10 "$GE_DIR/bin/wineserver" -w 2>/dev/null || true
+fi
 
 run_hook() {
   case "$1" in
@@ -167,6 +199,11 @@ IFS=',' read -ra _hooks <<< "$HOOKS"
 for h in "${_hooks[@]}"; do run_hook "$h"; done
 
 # launch -----------------------------------------------------------------------
+# NOT `exec` — we must stay as the parent so the EXIT trap runs when the game quits
+# (kills the input bridge + settles the wineserver). `exec` here silently orphaned
+# the bridge and left the server up, which broke the next relaunch.
 log "lane=$lane prefix=$PREFIX exe=$EXE"
 cd "$DIR"
-exec "$GE_DIR/bin/wine" "$EXE" "$@"
+rc=0; "$GE_DIR/bin/wine" "$EXE" "$@" || rc=$?
+log "game exited (code $rc) — cleaning up"
+exit "$rc"

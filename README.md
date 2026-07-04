@@ -27,9 +27,11 @@ soundtrack (stream-safe). `revert tag <image>` imports a custom Create-A-Graphic
 (Xbox / PlayStation / GameCube / keyboard; `auto` picks Xbox on Steam Deck). You can also
 change it in-game under **Game Options → MOD OPTIONS → Button Glyphs**.
 
-**Prefer clicking to typing?** `cd gui && go build -o revert-gui . && ./revert-gui` opens a
-small local web UI that runs the same lifecycle (doctor/setup/build/run/update) with a
-live output console — see [gui/README.md](gui/README.md).
+**Prefer clicking to typing?** Run `./revert gui` for a small local web UI that runs the
+same lifecycle (doctor/setup/build/run/update) with a live output console. `revert setup`
+also installs an app-menu launcher ("THUG2: Violet Vandal Edition") — or add one anytime
+with `./revert install-desktop` — so you never need a terminal again. See
+[gui/README.md](gui/README.md).
 
 See [docs/INSTALL.md](docs/INSTALL.md) for the full setup,
 [docs/STEAMDECK.md](docs/STEAMDECK.md) for the Steam Deck lane,

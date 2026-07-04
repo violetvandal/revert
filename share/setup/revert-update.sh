@@ -34,8 +34,15 @@ esac; done
 command -v git >/dev/null || err "git required"
 cd "$REVERT_ROOT"
 
+# Updates pull from the public release repo's 'origin'. A local/development checkout
+# (e.g. the private dev root) has no remote — distinguish that from a real network
+# failure so the message is actionable, not a scary "check your network".
+if ! git remote get-url origin >/dev/null 2>&1; then
+  err "no 'origin' remote — this looks like a local/development checkout. 'revert update' updates installs made with: git clone --recursive https://github.com/violetvandal/revert  (for a dev checkout, pull/build manually)."
+fi
+
 log "fetching releases ..."
-git fetch --tags --quiet origin || err "git fetch failed (check your network)"
+git fetch --tags --quiet origin || err "git fetch from origin failed — check your network (or 'git fetch origin' by hand for the real error)."
 
 current="$(git describe --tags --always 2>/dev/null || echo unknown)"
 latest="$(git tag -l 'v*' --sort=-v:refname | head -1)"

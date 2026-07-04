@@ -20,7 +20,7 @@ PS2-faithful mapping (per the THUG2 manual):
 Everything else (sticks, A/B/X/Y, etc.) stays native analog via DirectInput.
 Runs as the normal user (session ACLs grant /dev/input + /dev/uinput). No root.
 """
-import sys, signal
+import os, sys, signal
 import evdev
 from evdev import ecodes, UInput
 
@@ -64,8 +64,20 @@ def main():
         hold(KP7, st["lt"] or (st["lb"] and not both))
         hold(KP9, st["rt"] or (st["rb"] and not both))
 
+    cleaning = False
     def cleanup(*_):
-        hold(KP7, False); hold(KP9, False); hold(KP1, False); ui.close(); sys.exit(0)
+        # Release any held keys + close uinput, then exit HARD via os._exit so the
+        # interpreter doesn't run evdev's __del__ deallocator during shutdown (that
+        # races our teardown and prints an "exception ignored in deallocator"). The
+        # guard makes a second signal — our launcher SIGTERMs then pkills — a no-op.
+        nonlocal cleaning
+        if not cleaning:
+            cleaning = True
+            try:
+                hold(KP7, False); hold(KP9, False); hold(KP1, False); ui.close()
+            except Exception:
+                pass
+        os._exit(0)
     signal.signal(signal.SIGINT, cleanup)
     signal.signal(signal.SIGTERM, cleanup)
     print(f"shoulder-bridge: {dev.name}  LT/LB->KP7  RT/RB->KP9  LB+RB->KP1(walk)  (ctrl-C to stop)",

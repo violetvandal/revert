@@ -42,6 +42,19 @@
     transition:.15s; font-size:13px; }
   button.act:hover:not(:disabled) { background:rgba(162,75,255,.28); color:var(--bone); }
   button.act:disabled { opacity:.4; cursor:not-allowed; }
+  button.browse { flex:none; background:#120c22; color:var(--grape-soft); border:1px solid var(--line);
+    border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; }
+  button.browse:hover:not(:disabled) { border-color:var(--grape); color:var(--bone); }
+  button.browse:disabled { opacity:.5; cursor:default; }
+  .card.done { border-color:rgba(87,211,140,.45); }
+  .card.done h3::after { content:' ✓'; color:var(--ok); }
+  .lock { margin-top:8px; font-size:11.5px; color:var(--warn); }
+  .hint { margin-top:8px; font-size:11px; color:var(--ash); line-height:1.4; }
+  .progress { height:3px; background:rgba(162,75,255,.12); overflow:hidden; }
+  .progress .pfill { height:100%; width:35%; border-radius:3px;
+    background:linear-gradient(90deg,transparent,var(--grape),var(--grape-soft),var(--grape),transparent); }
+  .progress.on .pfill { animation:slide 1.15s ease-in-out infinite; }
+  @keyframes slide { 0%{transform:translateX(-120%)} 100%{transform:translateX(400%)} }
   .console { border:1px solid var(--line); border-radius:12px; background:#070410; display:flex; flex-direction:column; min-height:0; }
   .console .bar { display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid var(--line); font-size:12px; color:var(--ash); }
   .console .bar .run { color:var(--grape-soft); font-weight:600; }
@@ -70,32 +83,41 @@
 
   <main>
     <section class="steps" id="steps">
-      <div class="card">
+      <div class="card" id="card-doctor">
         <h3>1 · Doctor</h3><p>Check prerequisites (read-only).</p>
         <button class="act" data-cmd="doctor">Run doctor</button>
       </div>
-      <div class="card">
+      <div class="card" id="card-setup">
         <h3>2 · Setup</h3><p>Install Wine/DXVK/controller + prefixes.</p>
         <button class="act" data-cmd="setup">Run setup</button>
       </div>
-      <div class="card">
-        <h3>3 · Game data</h3><p>Turn your own THUG2 copy into the pristine base.</p>
-        <div class="controls"><input type="text" id="gamePath" placeholder="/path/to/your/THUG2 folder" /></div>
-        <button class="act" data-cmd="acquire-game-data" data-args="folder">Acquire game data</button>
+      <div class="card" id="card-data">
+        <h3>3 · Game data</h3><p>Turn your own THUG2 copy into the pristine base — a folder, or a link you supply.</p>
+        <div class="controls">
+          <input type="text" id="gamePath" placeholder="/path/to/your/THUG2 folder" />
+          <button class="browse" id="browse" type="button">Browse…</button>
+        </div>
+        <div class="controls">
+          <input type="text" id="gameUrl" placeholder="…or paste a link to a .zip / .7z / .iso" />
+        </div>
+        <button class="act" data-cmd="acquire-game-data" data-args="source">Acquire game data</button>
+        <div class="hint">Revert ships no game data. A link is fetched as-is (like curl) — you're responsible for the right to those files.</div>
       </div>
-      <div class="card">
+      <div class="card" id="card-build">
         <h3>4 · Build</h3><p>Build the edition (reproducible).</p>
         <div class="controls"><label class="chk"><input type="checkbox" id="fast" /> fast rebuild</label></div>
         <button class="act" data-cmd="build" data-args="fast">Build edition</button>
+        <div class="lock" hidden></div>
       </div>
-      <div class="card">
+      <div class="card" id="card-play">
         <h3>5 · Play</h3><p>Launch a lane.</p>
         <div class="controls">
           <select id="lane"><option value="qol">QOL-Modded</option><option value="vanilla">Vanilla</option><option value="online">Online (THUG Pro)</option></select>
         </div>
         <button class="act" data-cmd="run" data-args="lane">Play</button>
+        <div class="lock" hidden></div>
       </div>
-      <div class="card">
+      <div class="card" id="card-update">
         <h3>⟳ · Update</h3><p>Update to the latest release + rebuild.</p>
         <button class="act" data-cmd="update" data-args="check">Check for updates</button>
       </div>
@@ -108,6 +130,7 @@
         <span class="badge" id="badge" style="display:none"></span>
         <button class="act" id="clear" style="width:auto;padding:3px 10px;font-size:11px">clear</button>
       </div>
+      <div class="progress" id="progress"><div class="pfill"></div></div>
       <pre id="log"><span class="cmd">Ready. Pick a step on the left — output streams here live.</span>
 </pre>
     </section>
@@ -120,21 +143,68 @@ const badge = document.getElementById('badge');
 let es = null;
 
 function append(text, cls) {
+  // The <pre> is itself the scroll container. Stick to the bottom while the user
+  // is already near it, so live output follows without us chasing it — but don't
+  // yank them down if they've scrolled up to read something.
+  const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
   const span = document.createElement('span');
   if (cls) span.className = cls;
   span.textContent = text + "\n";
   log.appendChild(span);
-  log.parentElement.scrollTop = log.parentElement.scrollHeight;
+  if (stick) log.scrollTop = log.scrollHeight;
 }
+let busy = false;
+let state = {};
+
 function setBusy(b) {
-  document.querySelectorAll('button.act[data-cmd]').forEach(x => x.disabled = b);
+  busy = b;
   running.textContent = b ? 'running…' : 'idle';
+  document.getElementById('progress').classList.toggle('on', b);
+  if (b) document.querySelectorAll('button.act[data-cmd]').forEach(x => x.disabled = true);
+  else applyGating();
+}
+
+// Guard against losing a running command to an accidental tab/window close.
+window.addEventListener('beforeunload', e => {
+  if (busy) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// Reflect lifecycle state: mark completed steps ✓ and lock steps whose
+// prerequisites aren't met yet, so the flow reads top-to-bottom.
+function applyGating() {
+  const card = id => document.getElementById(id);
+  const gate = (id, done, enabled, hint) => {
+    const c = card(id); if (!c) return;
+    c.classList.toggle('done', !!done);
+    const btn = c.querySelector('button.act[data-cmd]');
+    if (btn) btn.disabled = busy || !enabled;
+    const lock = c.querySelector('.lock');
+    if (lock) { lock.hidden = enabled; if (!enabled && hint) lock.textContent = hint; }
+  };
+  // Always-available steps just clear their busy-disable.
+  ['card-doctor', 'card-update'].forEach(id => {
+    const btn = card(id).querySelector('button.act[data-cmd]'); if (btn) btn.disabled = busy;
+  });
+  gate('card-setup', state.wine && state.setup, true);
+  gate('card-data', state.pristine, true);
+  gate('card-build', state.build, !!state.pristine, 'Acquire game data first (step 3).');
+  gate('card-play', false, !!state.build && !!state.wine,
+       state.build ? 'Run setup first (step 2).' : 'Build the edition first (step 4).');
+}
+
+function refreshStatus() {
+  return fetch('/api/status').then(r => r.json()).then(s => { state = s || {}; applyGating(); }).catch(() => {});
 }
 
 function argsFor(btn) {
   const spec = btn.dataset.args || '';
   const out = [];
-  if (spec === 'folder') { const p = document.getElementById('gamePath').value.trim(); if (p) { out.push('--folder', p); } }
+  if (spec === 'source') {
+    const u = document.getElementById('gameUrl').value.trim();
+    const p = document.getElementById('gamePath').value.trim();
+    if (u) out.push('--url', u);
+    else if (p) out.push('--folder', p);
+  }
   if (spec === 'fast' && document.getElementById('fast').checked) out.push('--fast');
   if (spec === 'lane') out.push(document.getElementById('lane').value);
   if (spec === 'check') out.push('--check');
@@ -152,7 +222,8 @@ function run(cmd, args) {
   es.addEventListener('log', e => append(e.data));
   es.addEventListener('error', e => append(e.data || '(stream error)', 'err'));
   es.addEventListener('done', e => {
-    es.close(); es = null; setBusy(false);
+    es.close(); es = null;
+    refreshStatus().finally(() => setBusy(false));
     const ok = e.data === '0';
     badge.style.display = 'inline-block';
     badge.className = 'badge ' + (ok ? 'ok' : 'bad');
@@ -167,11 +238,21 @@ document.querySelectorAll('button.act[data-cmd]').forEach(btn => {
 });
 document.getElementById('clear').addEventListener('click', () => { log.textContent = ''; badge.style.display='none'; });
 
+document.getElementById('browse').addEventListener('click', () => {
+  const b = document.getElementById('browse'); b.disabled = true; b.textContent = '…';
+  fetch('/api/pick').then(r => r.json()).then(j => {
+    if (j.path) document.getElementById('gamePath').value = j.path;
+    else if (j.error) append('⚠ ' + j.error, 'err');
+  }).catch(() => {}).finally(() => { b.disabled = false; b.textContent = 'Browse…'; });
+});
+
 fetch('/api/info').then(r => r.json()).then(info => {
   document.getElementById('rootPath').textContent = info.root;
   document.getElementById('rootDot').className = 'dot ' + (info.revertFound ? 'ok' : 'bad');
   if (!info.revertFound) append('⚠ revert dispatcher not found under ' + info.root, 'err');
 }).catch(() => {});
+
+refreshStatus();
 </script>
 </body>
 </html>

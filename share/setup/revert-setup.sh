@@ -146,10 +146,15 @@ install_dxvk() {  # $1 = prefix path
 }
 
 # ---- winetricks components (main prefix) --------------------------------------
+# NOTE: do NOT install `dinput8` here. winetricks' dinput8 drops the *native* Microsoft
+# dinput8.dll (override=native), and native dinput8 under Wine cannot enumerate winebus/
+# SDL game controllers — THUG2 (a DirectInput game) then sees NO pad at all. Wine's
+# builtin dinput8 enumerates the pad correctly (as "Controller (XBOX 360 For Windows)",
+# guidInstance matching the saved pad0). set_dinput8_builtin() enforces builtin below.
 install_winetricks_components() {  # $1 = prefix
-  command -v winetricks >/dev/null || { warn "winetricks absent — skipping d3dx9/dinput8"; return 0; }
-  log "winetricks: d3dx9 dinput8 sound=pulse"
-  WINEPREFIX="$1" WINE="$GE_WINE" WINEDEBUG=-all winetricks -q d3dx9 dinput8 sound=pulse || warn "winetricks step had issues"
+  command -v winetricks >/dev/null || { warn "winetricks absent — skipping d3dx9"; return 0; }
+  log "winetricks: d3dx9 sound=pulse"
+  WINEPREFIX="$1" WINE="$GE_WINE" WINEDEBUG=-all winetricks -q d3dx9 sound=pulse || warn "winetricks step had issues"
 }
 
 # ---- WSFix winmm override (main prefix) ---------------------------------------
@@ -157,6 +162,17 @@ set_winmm_override() {  # $1 = prefix
   WINEPREFIX="$1" WINEDEBUG=-all "$GE_WINE" reg add \
     "HKCU\\Software\\Wine\\DllOverrides" /v winmm /d "native,builtin" /f >/dev/null 2>&1 \
     && log "  winmm=native,builtin set (WSFix loader)" || warn "  winmm override failed"
+}
+
+# ---- dinput8 = builtin (main prefix) -----------------------------------------
+# Force Wine's builtin dinput8 so DirectInput enumerates the controller. Clears any
+# stale native override + `*dinput8` key a prior winetricks run may have left behind.
+set_dinput8_builtin() {  # $1 = prefix
+  WINEPREFIX="$1" WINEDEBUG=-all "$GE_WINE" reg delete \
+    "HKCU\\Software\\Wine\\DllOverrides" /v "*dinput8" /f >/dev/null 2>&1 || true
+  WINEPREFIX="$1" WINEDEBUG=-all "$GE_WINE" reg add \
+    "HKCU\\Software\\Wine\\DllOverrides" /v dinput8 /d "builtin" /f >/dev/null 2>&1 \
+    && log "  dinput8=builtin set (DirectInput controller enumeration)" || warn "  dinput8 override failed"
 }
 
 # ---- Steam Deck controller (main prefix) -------------------------------------
@@ -296,6 +312,7 @@ init_prefix "$PREFIX_MAIN"
 install_dxvk "$PREFIX_MAIN"
 install_winetricks_components "$PREFIX_MAIN"
 set_winmm_override "$PREFIX_MAIN"
+set_dinput8_builtin "$PREFIX_MAIN"
 setup_controller "$PREFIX_MAIN"
 (( IS_DECK )) && setup_steam_shortcut_deck
 
@@ -306,6 +323,11 @@ if (( DO_ONLINE )); then
   warn "THUG Pro's .NET launcher needs Mono in the online prefix (WINEDLLOVERRIDES=mscoree=b).
   Copy GE-Proton's bundled Mono into $PREFIX_ONLINE, then install THUG Pro into it.
   See memory project_thugpro_profile for the exact steps (not auto-run here)."
+fi
+
+# App-menu launcher for the click-to-play GUI (no terminal needed afterwards).
+if [[ -x "${REVERT_ROOT}/revert" ]]; then
+  "${REVERT_ROOT}/revert" install-desktop || warn "desktop launcher install skipped (non-fatal)"
 fi
 
 log "setup complete. Next: revert acquire-game-data  then  revert build  then  revert run qol"

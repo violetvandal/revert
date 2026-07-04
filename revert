@@ -5,12 +5,15 @@
 # One command for the whole lifecycle:
 #   revert doctor                          check prerequisites (read-only)
 #   revert setup                           install Wine/DXVK/controller + prefixes
-#   revert acquire-game-data --iso <p>     turn YOUR THUG2 copy into the pristine base
+#   revert acquire-game-data --iso|--url   turn YOUR THUG2 copy into the pristine base
 #   revert acquire-hq [audio|textures]     fetch the optional HQ audio / textures packs
 #   revert build [--fast] [--only a,b]     build the edition (reproducible)
 #   revert run <vanilla|qol|online> [...]  launch a lane (--soundtrack, --glyphs)
+#   revert gui                             launch the click-to-install web UI (no terminal)
+#   revert install-desktop                 add an app-menu launcher for the GUI
 #   revert tag <image> [...]               make an in-game Create-A-Graphic tag
 #   revert update [--check]                update to the latest release + rebuild
+#   revert status [--json]                 report lifecycle state (used by the GUI)
 #
 # Architecture (see docs/ARCHITECTURE.md): a Go "build" core (thugkit) owns producing
 # the edition; bash owns launch + system setup. This dispatcher routes to both.
@@ -35,7 +38,7 @@ bad()  { printf '  %s✗%s %s\n' "$c_red" "$c_off" "$*"; }
 note() { printf '  %s· %s%s\n' "$c_dim" "$*" "$c_off"; }
 
 usage() {
-  sed -n '3,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '3,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -197,11 +200,83 @@ cmd_acquire_hq() {
   exec "$s" "$@"
 }
 
+# ---- status: machine-readable lifecycle state (for the GUI) --------------------
+# Same signals doctor prints, but as booleans the GUI uses to gate steps. Passive:
+# stats paths only, never mutates. `--json` emits one JSON object on stdout.
+cmd_status() {
+  local wine=false setup=false thugkit=false pristine=false build=false online=false
+  [[ -x "$GE_DIR/bin/wine" ]]                    && wine=true
+  [[ -d "$PREFIX_MAIN" ]]                        && setup=true
+  [[ -x "$THUGKIT" ]] && "$THUGKIT" 2>&1 | grep -q build && thugkit=true
+  [[ -d "$PRISTINE_DIR/Data/pre" ]]              && pristine=true
+  [[ -d "$EDITION_QOL/Data/pre" ]]               && build=true
+  [[ -d "$PREFIX_ONLINE" ]]                      && online=true
+  if [[ "${1:-}" == "--json" ]]; then
+    printf '{"wine":%s,"setup":%s,"thugkit":%s,"pristine":%s,"build":%s,"online":%s}\n' \
+      "$wine" "$setup" "$thugkit" "$pristine" "$build" "$online"
+    return 0
+  fi
+  log "Revert status"
+  $wine     && ok "wine runtime"        || bad "wine runtime (run: revert setup)"
+  $setup    && ok "main prefix"         || bad "main prefix (run: revert setup)"
+  $pristine && ok "pristine game data"  || bad "pristine game data (run: revert acquire-game-data)"
+  $build    && ok "edition built"       || bad "edition built (run: revert build)"
+  $online   && ok "online prefix"       || note "online prefix (THUG Pro lane, optional)"
+}
+
 # ---- update: pull the latest tagged release + rebuild --------------------------
 cmd_update() {
   local s="${SHARE_DIR}/setup/revert-update.sh"
   [[ -x "$s" ]] || err "revert-update.sh missing or not executable ($s)"
   exec "$s" "$@"
+}
+
+# ---- gui: build (once) + launch the local web-UI installer ---------------------
+cmd_gui() {
+  local dir="${REVERT_ROOT}/gui" bin="${REVERT_ROOT}/gui/revert-gui"
+  if [[ ! -x "$bin" ]]; then
+    command -v go >/dev/null || err "the GUI needs Go to build once (or a prebuilt gui/revert-gui). Install Go, or use the CLI: revert doctor|setup|build|run."
+    log "building the GUI (one-time) ..."
+    ( cd "$dir" && go build -o revert-gui . ) || err "GUI build failed"
+  fi
+  exec "$bin" "$@"
+}
+
+# ---- install-desktop: app-menu launcher for the GUI (Linux desktop / Deck) ------
+# Writes a .desktop into ~/.local/share/applications so "THUG2: Violet Vandal Edition"
+# appears in the app menu and launches the GUI with no terminal. Absolute paths are
+# stamped from REVERT_ROOT, so it works wherever the toolkit was cloned.
+cmd_install_desktop() {
+  local apps="${HOME}/.local/share/applications"
+  local dest="${apps}/thug2-violet-vandal.desktop"
+  local icon="${REVERT_ROOT}/tools/deck/art/icon.png"
+  [[ -f "$icon" ]] || icon="input-gaming"
+  mkdir -p "$apps"
+  # Pre-build the GUI so the first click launches instantly (best-effort; non-fatal).
+  if [[ ! -x "${REVERT_ROOT}/gui/revert-gui" ]] && command -v go >/dev/null; then
+    ( cd "${REVERT_ROOT}/gui" && go build -o revert-gui . ) >/dev/null 2>&1 || true
+  fi
+  cat > "$dest" <<EOF
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=THUG2: Violet Vandal Edition
+GenericName=Revert — install & play
+Comment=Install, build, and play THUG2: Violet Vandal Edition
+Exec=${REVERT_ROOT}/revert gui
+Icon=${icon}
+Terminal=false
+Categories=Game;
+Keywords=THUG2;Tony Hawk;Revert;Violet Vandal;skate;
+EOF
+  chmod +x "$dest"
+  command -v update-desktop-database >/dev/null && update-desktop-database "$apps" >/dev/null 2>&1 || true
+  log "installed app-menu launcher: $dest"
+  note "Look for 'THUG2: Violet Vandal Edition' in your application menu."
+  local pn=/sys/devices/virtual/dmi/id/product_name
+  if [[ "${SteamDeck:-0}" == "1" ]] || { [[ -r "$pn" ]] && grep -qiE 'jupiter|galileo' "$pn"; }; then
+    note "Steam Deck: to launch from Gaming Mode, add ${REVERT_ROOT}/revert to Steam as a non-Steam game with launch options: gui"
+  fi
 }
 
 case "${1:-help}" in
@@ -210,8 +285,11 @@ case "${1:-help}" in
   acquire-game-data) shift; cmd_acquire "$@";;
   acquire-hq)        shift; cmd_acquire_hq "$@";;
   update)            shift; cmd_update "$@";;
+  status)            shift; cmd_status "$@";;
   build)             shift; cmd_build "$@";;
   run)               shift; cmd_run "$@";;
+  gui)               shift; cmd_gui "$@";;
+  install-desktop)   shift; cmd_install_desktop "$@";;
   tag)               shift; cmd_tag "$@";;
   help|-h|--help)    usage 0;;
   *) echo "revert: unknown command '${1:-}'" >&2; usage 1;;

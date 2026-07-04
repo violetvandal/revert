@@ -11,6 +11,7 @@ package main
 import (
 	"bufio"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -70,6 +71,8 @@ func main() {
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 	mux.HandleFunc("/api/stream", streamHandler(root, revert))
 	mux.HandleFunc("/api/info", infoHandler(root, revert))
+	mux.HandleFunc("/api/status", statusHandler(root, revert))
+	mux.HandleFunc("/api/pick", pickHandler)
 
 	// Bind to loopback on a free port (local, single-user; never exposed).
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -92,6 +95,72 @@ func infoHandler(root, revert string) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"root":%q,"revertFound":%t}`, root, statErr == nil)
 	}
+}
+
+// statusHandler runs `revert status --json` and forwards the lifecycle state the
+// front-end uses to gate steps (grey out Build until game data is present, etc.).
+func statusHandler(root, revert string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := os.Stat(revert); err != nil {
+			fmt.Fprint(w, "{}")
+			return
+		}
+		c := exec.Command(revert, "status", "--json")
+		c.Dir = root
+		c.Env = append(os.Environ(), "REVERT_ROOT="+root, "TERM=dumb")
+		out, err := c.Output()
+		if err != nil || len(out) == 0 {
+			fmt.Fprint(w, "{}")
+			return
+		}
+		w.Write(out)
+	}
+}
+
+// pickHandler opens the OS-native folder chooser and returns the selected path.
+// A web page can't read a real filesystem path, so we shell out to the desktop's
+// own dialog (zenity/kdialog on Linux, osascript on macOS, PowerShell on Windows).
+func pickHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	path, err := pickFolder()
+	resp := map[string]string{"path": path}
+	if err != nil {
+		resp["error"] = err.Error()
+	}
+	b, _ := json.Marshal(resp)
+	w.Write(b)
+}
+
+// pickFolder invokes the native directory picker. Returns "" if the user cancels
+// (the dialog exits non-zero), or an error if no dialog program is available.
+func pickFolder() (string, error) {
+	var c *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		c = exec.Command("osascript", "-e",
+			`POSIX path of (choose folder with prompt "Select your THUG2 folder")`)
+	case "windows":
+		ps := `Add-Type -AssemblyName System.Windows.Forms;` +
+			`$d = New-Object System.Windows.Forms.FolderBrowserDialog;` +
+			`$d.Description = 'Select your THUG2 folder';` +
+			`if ($d.ShowDialog() -eq 'OK') { [Console]::Out.Write($d.SelectedPath) }`
+		c = exec.Command("powershell", "-NoProfile", "-STA", "-Command", ps)
+	default: // linux / *bsd
+		if p, _ := exec.LookPath("zenity"); p != "" {
+			c = exec.Command(p, "--file-selection", "--directory",
+				"--title=Select your THUG2 folder")
+		} else if p, _ := exec.LookPath("kdialog"); p != "" {
+			c = exec.Command(p, "--getexistingdirectory", os.Getenv("HOME"))
+		} else {
+			return "", fmt.Errorf("no folder dialog found — install zenity or kdialog, or type the path")
+		}
+	}
+	out, err := c.Output()
+	if err != nil {
+		return "", nil // treat cancel / non-zero as "no selection", not an error
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // streamHandler runs `revert <cmd> [args...]` and streams merged output as SSE.
