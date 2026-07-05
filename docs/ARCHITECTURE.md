@@ -68,5 +68,6 @@ Fyne GUI front door; Windows / Steam-Deck packaging; porting the Python CAS step
 the licensed-asset injectors to Go; multi-distro setup beyond Fedora (doctor warns).
 
 ## Legacy (superseded, kept for reference)
-`rebuild-playable.sh` (→ `revert build`), the `run-*.sh` / `launch-*.sh` zoo
-(→ `revert run`), and `install.sh` (→ `revert setup` + `acquire-game-data`).
+`rebuild-playable.sh` (→ `revert build`) and the `run-*.sh` / `launch-*.sh` zoo
+(→ `revert run`). (`install.sh` is no longer legacy — it is now the one-command
+bootstrap that sets up prerequisites, clones, and runs the `revert` lifecycle.)

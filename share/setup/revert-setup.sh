@@ -180,8 +180,8 @@ set_dinput8_builtin() {  # $1 = prefix
 # The pad-mirror bridge fixes it: it creates a STABLE virtual analog pad ("Violet Vandal
 # Pad") and continuously mirrors Steam's pad into it, and THUG2 binds to OURS — so the
 # game never sees Steam's flaky pad. So: import the gp0_/k0_ map, start the bridge (which
-# creates the virtual pad regardless of whether Steam is up), then detect OUR pad's
-# guidInstance and write pad0 (per-prefix, so it must be detected live, not hardcoded).
+# creates the virtual pad regardless of whether Steam is up), then set pad0 to OUR pad's
+# guidInstance (detected live if the probe works, else the known deterministic GUID).
 # memory: project_steamdeck_controller
 setup_controller_deck() {  # $1 = prefix
   local pfx="$1" st="$CONTROLS_DIR/thug2-settings-deck.reg"
@@ -208,11 +208,19 @@ setup_controller_deck() {  # $1 = prefix
     warn "  pad-mirror bridge missing ($PAD_BRIDGE) — cannot set pad0"
   fi
   if [[ -f "$PAD_PROBE" ]]; then
-    guid="$(WINEPREFIX="$pfx" WINEDEBUG=-all timeout 30 "$GE_WINE" "$PAD_PROBE" 2>/dev/null \
+    guid="$(WINEPREFIX="$pfx" WINEDEBUG=-all timeout 12 "$GE_WINE" "$PAD_PROBE" 2>/dev/null \
             | awk '/Violet Vandal Pad/{v=1} v&&/guidInstance=/{sub(/.*guidInstance=/,"");print;exit}' \
             | tr -d '[:space:]')"
   fi
   [[ -n "$bpid" ]] && kill "$bpid" 2>/dev/null || true
+  # Fallback: the standalone probe HANGS on Wine 11.11 (SteamOS) and returns nothing. But
+  # the pad-mirror uses a FIXED VID/PID (0x1209/0x764A), so Wine derives the SAME DInput
+  # instance GUID on every Deck — B74C8413-77FA-11F1-8001-000044455354 (captured from a
+  # +dinput trace of a real THUG2 launch). Use it whenever live detection yields no GUID.
+  if [[ ! "$guid" =~ $re ]]; then
+    guid="B74C8413-77FA-11F1-8001-000044455354"
+    log "  live probe gave no GUID (hangs on Wine 11.11) — using known virtual-pad GUID"
+  fi
   if [[ "$guid" =~ $re ]]; then
     WINEPREFIX="$pfx" WINEDEBUG=-all "$GE_WINE" reg add \
       "HKCU\\Software\\Activision\\Tony Hawk's Underground 2\\Settings" \

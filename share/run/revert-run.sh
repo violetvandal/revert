@@ -121,7 +121,7 @@ run_hook() {
     soundtrack)
       if [[ -x "$SET_SOUNDTRACK" ]]; then
         log "soundtrack -> $SOUNDTRACK"
-        "$SET_SOUNDTRACK" "$DIR" "$SOUNDTRACK" || err "soundtrack swap failed"
+        "$SET_SOUNDTRACK" "$DIR" "$SOUNDTRACK" || log "(soundtrack swap skipped — keeping the build's soundtrack)"
       else
         log "(set_soundtrack.sh absent — leaving current soundtrack)"
       fi;;

@@ -56,6 +56,12 @@ def ser(items):
     return bytes(out)
 
 
+# A valid, empty shortcuts.vdf (root -> "shortcuts" -> {}) — what Steam itself writes
+# the first time you add a non-Steam game. We create this on a fresh install so a
+# first-timer never has to add a dummy shortcut by hand first.
+EMPTY_SHORTCUTS = ser([[0x00, b"shortcuts", []]])
+
+
 # ---- helpers -----------------------------------------------------------------
 def get(entry, key):
     for it in entry:
@@ -127,6 +133,19 @@ def find_vdf():
     return None
 
 
+def find_config_dir():
+    """The logged-in user's userdata/<id>/config dir — where a new shortcuts.vdf goes.
+    Picks the most-recently-used numeric account id (the active login)."""
+    users = []
+    for pat in ("~/.local/share/Steam/userdata/*", "~/.steam/steam/userdata/*"):
+        users += glob.glob(os.path.expanduser(pat))
+    users = [u for u in users if os.path.basename(u).isdigit() and os.path.basename(u) != "0"]
+    if not users:
+        return None
+    users.sort(key=os.path.getmtime, reverse=True)
+    return os.path.join(users[0], "config")
+
+
 def steam_running():
     try:
         return subprocess.run(["pgrep", "-x", "steam"], capture_output=True).returncode == 0
@@ -147,7 +166,19 @@ def main():
 
     vdf = a.vdf or find_vdf()
     if not vdf or not os.path.exists(vdf):
-        print("shortcuts.vdf not found (open Steam once to create it)", file=sys.stderr); return 2
+        # Fresh Steam: shortcuts.vdf doesn't exist until the first non-Steam game is
+        # added. Create a valid empty one so a first-timer doesn't have to do that by hand.
+        target = a.vdf
+        if not target:
+            cfg = find_config_dir()
+            if not cfg:
+                print("Steam has no user data yet — sign in to Steam once, then re-run.", file=sys.stderr)
+                return 2
+            target = os.path.join(cfg, "shortcuts.vdf")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        open(target, "wb").write(EMPTY_SHORTCUTS)
+        vdf = target
+        print(f"created empty shortcuts.vdf -> {vdf}")
     raw = open(vdf, "rb").read()
 
     # SELF-TEST: parse -> serialize must reproduce the file exactly, or we never write.

@@ -29,7 +29,13 @@ PRX="$GD/Data/pre/qb_scripts.prx"
 VAR="$ROOT/tools/bink/radio/variants"
 ENTRY='scripts/game/skater/skater_sfx.qb'     # prx.py find() maps / -> \
 
-swap_titles() {  # $1 = variant .qb
+swap_titles() {  # $1 = variant .qb (jukebox title table — a rebuildable, gitignored artifact)
+  if [ ! -f "$1" ]; then
+    # Not shipped in slim/public clones. The build already carries the matching titles,
+    # so skipping is harmless — never let a missing title table block launch.
+    echo "  (jukebox title table $(basename "$1") not present — keeping the build's titles)"
+    return 0
+  fi
   python3 "$ROOT/tools/prx/prx.py" replacez "$PRX" "$ENTRY" "$1" "$PRX" >/dev/null
 }
 
