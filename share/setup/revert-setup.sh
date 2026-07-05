@@ -207,20 +207,12 @@ setup_controller_deck() {  # $1 = prefix
   else
     warn "  pad-mirror bridge missing ($PAD_BRIDGE) — cannot set pad0"
   fi
-  if [[ -f "$PAD_PROBE" ]]; then
-    guid="$(WINEPREFIX="$pfx" WINEDEBUG=-all timeout 12 "$GE_WINE" "$PAD_PROBE" 2>/dev/null \
-            | awk '/Violet Vandal Pad/{v=1} v&&/guidInstance=/{sub(/.*guidInstance=/,"");print;exit}' \
-            | tr -d '[:space:]')"
-  fi
   [[ -n "$bpid" ]] && kill "$bpid" 2>/dev/null || true
-  # Fallback: the standalone probe HANGS on Wine 11.11 (SteamOS) and returns nothing. But
-  # the pad-mirror uses a FIXED VID/PID (0x1209/0x764A), so Wine derives the SAME DInput
-  # instance GUID on every Deck — B74C8413-77FA-11F1-8001-000044455354 (captured from a
-  # +dinput trace of a real THUG2 launch). Use it whenever live detection yields no GUID.
-  if [[ ! "$guid" =~ $re ]]; then
-    guid="B74C8413-77FA-11F1-8001-000044455354"
-    log "  live probe gave no GUID (hangs on Wine 11.11) — using known virtual-pad GUID"
-  fi
+  # pad0 = the virtual pad's DInput instance GUID. We deliberately do NOT run the live
+  # GUID probe: on Wine 11.11 (SteamOS) it HANGS forever and pops a blank window mid-setup.
+  # The pad-mirror uses a FIXED VID/PID (0x1209/0x764A), so Wine derives the SAME instance
+  # GUID on every Deck — this value, captured from a +dinput trace of a real THUG2 launch.
+  guid="B74C8413-77FA-11F1-8001-000044455354"
   if [[ "$guid" =~ $re ]]; then
     WINEPREFIX="$pfx" WINEDEBUG=-all "$GE_WINE" reg add \
       "HKCU\\Software\\Activision\\Tony Hawk's Underground 2\\Settings" \
