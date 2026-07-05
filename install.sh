@@ -107,6 +107,17 @@ else
 fi
 cd "$DEST" || die "cannot enter $DEST"
 
+# Put `revert` on your PATH so it runs from any folder (not just $DEST). The dispatcher
+# resolves its own root via `readlink -f`, so a symlink works correctly.
+mkdir -p "$HOME/.local/bin"
+if ln -sf "$DEST/revert" "$HOME/.local/bin/revert" 2>/dev/null; then
+  ok "'revert' is now runnable from anywhere (~/.local/bin/revert)"
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) : ;;
+    *) info "add ~/.local/bin to your PATH to use the short 'revert' (or run $DEST/revert)";;
+  esac
+fi
+
 # ── 5. system setup (Wine, controller, Steam shortcut) ────────────────────────
 step "System setup — Wine, controller, Steam shortcut"
 info "This is the step that needs your password (to install a few 32-bit libraries)."
