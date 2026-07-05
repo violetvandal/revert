@@ -11,6 +11,7 @@
 #   revert run <vanilla|qol|online> [...]  launch a lane (--soundtrack, --glyphs)
 #   revert gui                             launch the click-to-install web UI (no terminal)
 #   revert install-desktop                 add an app-menu launcher for the GUI
+#   revert calibrate-controller            (Deck) detect + bind the controller pad GUID
 #   revert tag <image> [...]               make an in-game Create-A-Graphic tag
 #   revert update [--check]                update to the latest release + rebuild
 #   revert status [--json]                 report lifecycle state (used by the GUI)
@@ -38,7 +39,7 @@ bad()  { printf '  %s✗%s %s\n' "$c_red" "$c_off" "$*"; }
 note() { printf '  %s· %s%s\n' "$c_dim" "$*" "$c_off"; }
 
 usage() {
-  sed -n '3,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '3,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -200,6 +201,13 @@ cmd_acquire_hq() {
   exec "$s" "$@"
 }
 
+# ---- calibrate-controller: (Deck) detect the pad GUID + bind pad0 (run after a build) --
+cmd_calibrate() {
+  local s="${SHARE_DIR}/setup/revert-calibrate-controller.sh"
+  [[ -x "$s" ]] || err "revert-calibrate-controller.sh missing or not executable ($s)"
+  exec "$s" "$@"
+}
+
 # ---- status: machine-readable lifecycle state (for the GUI) --------------------
 # Same signals doctor prints, but as booleans the GUI uses to gate steps. Passive:
 # stats paths only, never mutates. `--json` emits one JSON object on stdout.
@@ -290,6 +298,7 @@ case "${1:-help}" in
   run)               shift; cmd_run "$@";;
   gui)               shift; cmd_gui "$@";;
   install-desktop)   shift; cmd_install_desktop "$@";;
+  calibrate-controller) shift; cmd_calibrate "$@";;
   tag)               shift; cmd_tag "$@";;
   help|-h|--help)    usage 0;;
   *) echo "revert: unknown command '${1:-}'" >&2; usage 1;;

@@ -208,19 +208,12 @@ setup_controller_deck() {  # $1 = prefix
     warn "  pad-mirror bridge missing ($PAD_BRIDGE) — cannot set pad0"
   fi
   [[ -n "$bpid" ]] && kill "$bpid" 2>/dev/null || true
-  # pad0 = the virtual pad's DInput instance GUID. We deliberately do NOT run the live
-  # GUID probe: on Wine 11.11 (SteamOS) it HANGS forever and pops a blank window mid-setup.
-  # The pad-mirror uses a FIXED VID/PID (0x1209/0x764A), so Wine derives the SAME instance
-  # GUID on every Deck — this value, captured from a +dinput trace of a real THUG2 launch.
-  guid="B74C8413-77FA-11F1-8001-000044455354"
-  if [[ "$guid" =~ $re ]]; then
-    WINEPREFIX="$pfx" WINEDEBUG=-all "$GE_WINE" reg add \
-      "HKCU\\Software\\Activision\\Tony Hawk's Underground 2\\Settings" \
-      /v pad0 /t REG_SZ /d "$guid" /f >/dev/null 2>&1 \
-      && log "  pad0 -> $guid (Violet Vandal virtual pad)" || warn "  pad0 write failed"
-  else
-    warn "  could not detect the virtual pad GUID — is /dev/uinput writable + python3 present? (pad0 unset)"
-  fi
+  # pad0 (which virtual pad THUG2 binds to) is NOT set here. Wine 11.11 gives the pad a
+  # PER-PREFIX DInput instance GUID that can only be read from the game's own +dinput trace
+  # (the standalone probe hangs on Wine 11.11), and the game doesn't exist yet at setup time
+  # (build runs later). `revert calibrate-controller` sets pad0 after the build — the
+  # bootstrap runs it automatically; manual installs run it once after `revert build`.
+  log "  controller bindings imported — pad0 set by 'revert calibrate-controller' after the build"
   [[ -w /dev/uinput ]] || warn "  /dev/uinput not writable — the pad-mirror bridge needs it"
   # leave the prefix's wineserver torn down so the first game launch starts clean
   "$GE_DIR/bin/wineserver" -k 2>/dev/null || true

@@ -131,6 +131,12 @@ fi
 step "Building your edition"
 ./revert build || die "build failed — see the messages above."
 
+# ── 8. Steam Deck controller calibration (needs the built game) ───────────────
+if is_deck; then
+  step "Detecting your controller"
+  ./revert calibrate-controller || warn "controller calibration hiccuped — re-run later: ./revert calibrate-controller"
+fi
+
 # ── done ──────────────────────────────────────────────────────────────────────
 printf '\n%s✓ All done!%s\n' "$g" "$o"
 if is_deck; then
