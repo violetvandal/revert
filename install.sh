@@ -2,7 +2,11 @@
 #
 # install.sh — one-command installer for THUG2: Violet Vandal Edition.
 #
-#   curl -fsSL https://raw.githubusercontent.com/violetvandal/revert/main/install.sh | bash
+#   bash <(curl -fsSL https://raw.githubusercontent.com/violetvandal/revert/main/install.sh)
+#
+# Run it exactly like that — NOT `curl … | bash`. Piping makes this script bash's stdin,
+# so the one-time password/sudo prompt can't read your keyboard (there's a guard below
+# that refuses the pipe form for this reason).
 #
 # Written for a first-timer on a Steam Deck (works on any Linux desktop too). It gets
 # you from a fresh machine to playing with as little typing as possible:
