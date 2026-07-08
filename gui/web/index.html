@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Revert — THUG2: Violet Vandal Edition</title>
+<title>Revert · THUG2: Violet Vandal Edition</title>
 <style>
   :root {
     --night:#0a0610; --surface:#17102a; --surface2:#1e1638; --line:#2a2044;
@@ -11,6 +11,9 @@
     --ok:#57d38c; --warn:#f5c518;
   }
   * { box-sizing:border-box; }
+  /* `main,.wizard{display:grid}` below would override the plain `hidden` attribute
+     (author display beats the UA [hidden] rule), so make hidden win explicitly. */
+  [hidden] { display:none !important; }
   html,body { height:100%; margin:0; }
   body {
     background:
@@ -86,7 +89,7 @@
 <body>
   <header>
     <h1>Revert <span class="vv">·</span> THUG2: Violet Vandal Edition</h1>
-    <div class="sub">One front door for the definitive, modernized THUG2. Ships tooling, never game data — bring your own copy.</div>
+    <div class="sub">One front door for the definitive, modernized THUG2. Ships tooling, never game data; bring your own copy.</div>
   </header>
 
   <div class="status">
@@ -99,7 +102,7 @@
     <div class="card wizcard">
       <h3 id="wizTitle">Set up your edition</h3>
       <div id="wizForm">
-      <p>One click does everything: Wine, controller, your game files, and the mods — no terminal.</p>
+      <p>One click does everything: Wine, controller, your game files, and the mods. No terminal.</p>
       <div class="banner" id="deckNote" hidden>Steam Deck detected. Do this in <b>Desktop Mode</b>; you'll switch to Gaming Mode to play.</div>
 
       <label class="fld">Install location
@@ -113,7 +116,7 @@
         <label class="fld" id="pwConfirmLabel" hidden>Repeat password
           <div class="controls"><input type="password" id="wizPw2" placeholder="repeat password" autocomplete="off" /></div>
         </label>
-        <div class="hint" id="pwHint">Needed once — setup installs a few system libraries (sudo). It stays on this machine.</div>
+        <div class="hint" id="pwHint">Needed once: setup installs a few system libraries (sudo). It stays on this machine.</div>
       </div>
 
       <label class="fld">Your THUG2 copy
@@ -125,20 +128,20 @@
           <input type="text" id="wizUrl" placeholder="…or paste a link to a .zip / .7z / .iso" />
         </div>
       </label>
-      <div class="hint">Revert ships no game data — bring your own copy. A link is fetched as-is (like curl); you're responsible for the right to those files.</div>
+      <div class="hint">Revert ships no game data; bring your own copy. A link is fetched as-is (like curl); you're responsible for the right to those files.</div>
 
       <button class="act" id="wizInstall">Install &amp; build</button>
       <div class="lock" id="wizErr" hidden></div>
       </div><!-- /#wizForm -->
 
       <div id="wizDone" hidden>
-        <p class="doneMsg">✓ <b>All set — your edition is installed and built.</b></p>
+        <p class="doneMsg">✓ <b>All set. Your edition is installed and built.</b></p>
         <ol class="steps-list">
           <li><b>Return to Gaming Mode.</b> Double-click <b>“Return to Gaming Mode”</b> on the desktop (top-left), or click the <b>Steam</b> menu → <b>Switch to Game Mode</b>.</li>
           <li><b>Find your game.</b> In Gaming Mode open your <b>Library</b> and look under <b>Non-Steam</b> games (or the <b>Collections</b> view) for <b>“Tony Hawk's Underground 2 (VV Edition)”</b>.</li>
-          <li><b>Press play.</b> Your controller is already calibrated — it should launch straight into widescreen.</li>
+          <li><b>Press play.</b> Your controller is already calibrated, so it should launch straight into widescreen.</li>
         </ol>
-        <div class="hint">Not there? It's a non-Steam shortcut — try Library → “Non-Steam” filter. You can also relaunch this installer any time to re-run steps.</div>
+        <div class="hint">Not there? It's a non-Steam shortcut; try Library → “Non-Steam” filter. You can also relaunch this installer any time to re-run steps.</div>
       </div>
     </div>
 
@@ -149,7 +152,7 @@
         <span class="badge" id="wizBadge" style="display:none"></span>
       </div>
       <div class="progress" id="wizProgress"><div class="pfill"></div></div>
-      <pre id="wizLog"><span class="cmd">Fill in the fields above, then press Install. Progress streams here — it takes a while (Wine, download, build).</span>
+      <pre id="wizLog"><span class="cmd">Fill in the fields above, then press Install. Progress streams here; it takes a while (Wine, download, build).</span>
 </pre>
     </section>
   </section>
@@ -166,7 +169,7 @@
         <button class="act" data-cmd="setup">Run setup</button>
       </div>
       <div class="card" id="card-data">
-        <h3>3 · Game data</h3><p>Turn your own THUG2 copy into the pristine base — a folder, or a link you supply.</p>
+        <h3>3 · Game data</h3><p>Turn your own THUG2 copy into the pristine base: a folder, or a link you supply.</p>
         <div class="controls">
           <input type="text" id="gamePath" placeholder="/path/to/your/THUG2 folder" />
           <button class="browse" id="browse" type="button">Browse…</button>
@@ -175,7 +178,7 @@
           <input type="text" id="gameUrl" placeholder="…or paste a link to a .zip / .7z / .iso" />
         </div>
         <button class="act" data-cmd="acquire-game-data" data-args="source">Acquire game data</button>
-        <div class="hint">Revert ships no game data. A link is fetched as-is (like curl) — you're responsible for the right to those files.</div>
+        <div class="hint">Revert ships no game data. A link is fetched as-is (like curl); you're responsible for the right to those files.</div>
       </div>
       <div class="card" id="card-build">
         <h3>4 · Build</h3><p>Build the edition (reproducible).</p>
@@ -205,7 +208,7 @@
         <button class="act" id="clear" style="width:auto;padding:3px 10px;font-size:11px">clear</button>
       </div>
       <div class="progress" id="progress"><div class="pfill"></div></div>
-      <pre id="log"><span class="cmd">Ready. Pick a step on the left — output streams here live.</span>
+      <pre id="log"><span class="cmd">Ready. Pick a step on the left; output streams here live.</span>
 </pre>
     </section>
   </main>
@@ -371,8 +374,8 @@ function showWizard(info) {
     document.getElementById('pwLabel').childNodes[0].nodeValue =
       createPw ? 'Create a password' : 'Your account password';
     document.getElementById('pwHint').textContent = createPw
-      ? "Your account has no password yet — pick one now (at least 8 characters, not all numbers). Setup needs it (installs a few system libraries), and you'll use it to unlock the Deck."
-      : "Needed once — setup installs a few system libraries (sudo). It stays on this machine.";
+      ? "Your account has no password yet: pick one now (at least 8 characters, not all numbers). Setup needs it (installs a few system libraries), and you'll use it to unlock the Deck."
+      : "Needed once: setup installs a few system libraries (sudo). It stays on this machine.";
     validateWizard();
   }).catch(() => {});
 }
@@ -381,7 +384,7 @@ function showWizard(info) {
 // the install. Enforce the common rules up front so a bad password can't start a run.
 function pwProblem(pw) {
   if (pw.length < 8) return 'Password must be at least 8 characters.';
-  if (/^\d+$/.test(pw)) return 'Password can’t be all numbers — add some letters.';
+  if (/^\d+$/.test(pw)) return 'Password can’t be all numbers. Add some letters.';
   return '';
 }
 
@@ -397,7 +400,7 @@ function validateWizard() {
   } else if (!pw) {
     problem = 'Enter your account password.';
   }
-  if (!problem && !src) { problem = 'Add your THUG2 copy — a folder or a download link.'; }
+  if (!problem && !src) { problem = 'Add your THUG2 copy: a folder or a download link.'; }
   document.getElementById('wizInstall').disabled = busy || !!problem;
   const err = document.getElementById('wizErr');
   if (problem && touched) { err.hidden = false; err.textContent = problem; }
@@ -428,7 +431,7 @@ function startInstall() {
     if (p) return wizError(p);
     if (pw !== document.getElementById('wizPw2').value) return wizError('The two passwords don’t match.');
   }
-  if (!src) return wizError('Point us at your THUG2 copy — a folder or a download link.');
+  if (!src) return wizError('Point us at your THUG2 copy: a folder or a download link.');
 
   setBusy(true);
   activeBadge.style.display = 'none';
@@ -456,7 +459,7 @@ function startInstall() {
             // management panel isn't the flow there (you play from Gaming Mode).
             document.getElementById('wizForm').hidden = true;
             document.getElementById('wizErr').hidden = true;
-            document.getElementById('wizTitle').textContent = 'Installed — one more step';
+            document.getElementById('wizTitle').textContent = 'Installed: one more step';
             document.getElementById('wizDone').hidden = false;
           } else if (info.revertFound) {
             append('Switching to the play menu…', 'cmd');
