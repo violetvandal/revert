@@ -83,6 +83,29 @@ if [[ "$PREFIX" == "$PREFIX_MAIN" ]]; then
   export WINEDLLOVERRIDES="dinput8=b${WINEDLLOVERRIDES:+;$WINEDLLOVERRIDES}"
 fi
 
+# On OSTree-based distros (Bazzite, Silverblue, Kinoite) the system SDL2 library is
+# 64-bit only, but Wine's 32-bit winebus.sys needs libSDL2-2.0.so.0 (i686) to enumerate
+# gamepads — without it winebus defers every controller to SDL and then drops it.
+# Symlink ONLY libSDL2 into a private dir rather than prepending the full Steam runtime
+# to LD_LIBRARY_PATH — that runtime ships libvulkan.so.1 which shadows the system Vulkan
+# ICD and causes DXVK to fail with "Failed to create Vulkan instance".
+_sdl32_src="${HOME}/.local/share/Steam/ubuntu12_32/steam-runtime/usr/lib/i386-linux-gnu/libSDL2-2.0.so.0"
+_sdl32_dir="${HOME}/.local/lib/revert-sdl32"
+if [[ -f "${_sdl32_src}" ]]; then
+  mkdir -p "${_sdl32_dir}"
+  ln -sf "${_sdl32_src}" "${_sdl32_dir}/libSDL2-2.0.so.0"
+fi
+[[ -L "${_sdl32_dir}/libSDL2-2.0.so.0" ]] \
+  && export LD_LIBRARY_PATH="${_sdl32_dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+unset _sdl32_src _sdl32_dir
+
+# On Bazzite/OSTree, z: -> / is a composefs overlay that reports 0 bytes free.
+# Wine picks the longest-prefix drive match, so without a closer drive letter the
+# game lives on z: and GetDiskFreeSpaceEx returns 0 → "not enough disk space for
+# saves". Add d: pointing at REVERT_ROOT (on the real data partition) so Wine routes
+# the game path through d: instead of z:, and the disk-space query returns real stats.
+ln -sfn "$REVERT_ROOT" "${PREFIX}/dosdevices/d:"
+
 # button-glyph style for VV.GlyphFix.asi (xbox/playstation/gamecube/keyboard)
 VV_GLYPHS="$(resolve_glyphs "$GLYPHS")"; export VV_GLYPHS
 log "button glyphs -> $VV_GLYPHS$( [[ "$GLYPHS" == auto ]] && is_steam_deck && echo ' (Steam Deck)')"
@@ -127,13 +150,15 @@ run_hook() {
       fi;;
     padfix)
       # THUG2 only opens the gamepad whose DirectInput guidInstance matches the registry
-      # value pad0 (HKCU\...\Settings). On the Steam Deck the controller is Steam Input's
-      # emulated Xbox pad, and Wine can regenerate that GUID across reboots / Steam updates,
-      # so a static pad0 goes stale and the game silently falls back to keyboard+mouse only.
-      # Detect the live pad's GUID and write pad0 fresh before each launch. Deck-only; desktop
-      # uses the physical pad's saved GUID. The probe runs Wine (dinput/winebus, opens the pad)
-      # so it MUST tear its wineserver down before the game launches, or the game hangs at boot.
-      if is_steam_deck; then
+      # value pad0 (HKCU\...\Settings). The GUID is assigned by Wine/SDL and can vary
+      # between Wine versions and systems, so a static value in thug2-settings.reg goes
+      # stale. Probe the live pad and refresh pad0 before each launch.
+      #
+      # Deck: pad0 points at the virtual "Violet Vandal Pad" whose GUID is pinned by
+      # `revert calibrate-controller` (run once after build). Probing here would clobber
+      # that with the raw Xbox GUID → skip on Deck.
+      # Desktop: SDL (loaded via Steam runtime) assigns the GUID; probe it fresh each run.
+      if ! is_steam_deck; then
         if [[ -f "${PAD_PROBE:-}" ]]; then
           local guid
           guid="$(WINEDEBUG=-all timeout 30 "$GE_DIR/bin/wine" "$PAD_PROBE" 2>/dev/null \
@@ -143,7 +168,7 @@ run_hook() {
             WINEDEBUG=-all "$GE_DIR/bin/wine" reg add \
               "HKCU\\Software\\Activision\\Tony Hawk's Underground 2\\Settings" \
               /v pad0 /t REG_SZ /d "$guid" /f >/dev/null 2>&1 \
-              && log "pad0 -> $guid (live Deck controller)" \
+              && log "pad0 -> $guid" \
               || log "(padfix: reg write failed — pad0 unchanged)"
           else
             log "(padfix: no gamepad GUID detected — is the controller on? leaving pad0)"
@@ -151,10 +176,8 @@ run_hook() {
         else
           log "(padfix: pad probe missing: ${PAD_PROBE:-unset})"
         fi
-        # Critical: the probe started a wineserver and opened the pad device. Flush + tear it
-        # fully down so THUG2 boots on a clean server instead of inheriting the probe's
-        # half-initialised input state (which hangs at the blue screen). -w flushes the pad0
-        # write on graceful exit; then nuke any orphaned wine helpers it left behind.
+        # The probe started a wineserver. Flush + tear it fully down so THUG2 boots on
+        # a clean server — stale input state from the probe hangs the game at boot.
         timeout 15 "$GE_DIR/bin/wineserver" -w 2>/dev/null || true
         pkill -9 -x services.exe  2>/dev/null || true
         pkill -9 -x winedevice.exe 2>/dev/null || true
