@@ -49,6 +49,20 @@ done
 
 GE_WINE="$GE_DIR/bin/wine"
 
+# On OSTree-based distros (Bazzite, Silverblue, Kinoite) the system SDL2 is 64-bit
+# only, but Wine's 32-bit winebus.sys needs libSDL2-2.0.so.0 (i686) to enumerate
+# gamepads. Symlink ONLY libSDL2 into a private dir — the full Steam runtime ships
+# libvulkan.so.1 which shadows the system Vulkan ICD and breaks DXVK.
+_sdl32_src="${HOME}/.local/share/Steam/ubuntu12_32/steam-runtime/usr/lib/i386-linux-gnu/libSDL2-2.0.so.0"
+_sdl32_dir="${HOME}/.local/lib/revert-sdl32"
+if [[ -f "${_sdl32_src}" ]]; then
+  mkdir -p "${_sdl32_dir}"
+  ln -sf "${_sdl32_src}" "${_sdl32_dir}/libSDL2-2.0.so.0"
+fi
+[[ -L "${_sdl32_dir}/libSDL2-2.0.so.0" ]] \
+  && export LD_LIBRARY_PATH="${_sdl32_dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+unset _sdl32_src _sdl32_dir
+
 # ---- system packages ----------------------------------------------------------
 # Steam Deck: the 32-bit X libs THUG2's win32 wine needs (without them the game
 # can't create a window: nodrv_CreateWindow). The pad bridge is stdlib-only and
@@ -286,6 +300,9 @@ setup_controller() {  # $1 = prefix
   else
     warn "  controller .reg files missing in $CONTROLS_DIR"
   fi
+  # pad0 (which physical gamepad THUG2 binds to) is NOT set here — `revert run` detects
+  # the live GUID via the padfix hook before each launch, so it always reflects the actual
+  # SDL-assigned guidInstance even across Wine updates or prefix rebuilds.
   [[ -f "$TRIGGER_BRIDGE" ]] || warn "  trigger-bridge script missing ($TRIGGER_BRIDGE)"
   if [[ ! -w /dev/uinput ]]; then
     warn "  /dev/uinput not writable — the L2/R2 trigger bridge needs it. To grant access:
@@ -301,6 +318,9 @@ check_ge
 
 log "== main prefix (Vanilla + QOL-Modded) =="
 init_prefix "$PREFIX_MAIN"
+# On Bazzite/OSTree, z: -> / (composefs, 0 bytes free). Add d: so the game runs
+# on a drive backed by the real data partition and GetDiskFreeSpaceEx returns real stats.
+ln -sfn "$REVERT_ROOT" "${PREFIX_MAIN}/dosdevices/d:"
 (( IS_DECK )) && set_virtual_desktop "$PREFIX_MAIN" 1280x800
 install_dxvk "$PREFIX_MAIN"
 install_winetricks_components "$PREFIX_MAIN"

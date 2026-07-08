@@ -83,18 +83,21 @@ def main():
     print(f"shoulder-bridge: {dev.name}  LT/LB->KP7  RT/RB->KP9  LB+RB->KP1(walk)  (ctrl-C to stop)",
           file=sys.stderr, flush=True)
 
-    for ev in dev.read_loop():
-        if ev.type == ecodes.EV_ABS:
-            if ev.code == LT_AXIS:
-                st["lt"] = True if ev.value >= TRIG_ON else (False if ev.value <= TRIG_OFF else st["lt"])
-            elif ev.code == RT_AXIS:
-                st["rt"] = True if ev.value >= TRIG_ON else (False if ev.value <= TRIG_OFF else st["rt"])
-            else:
-                continue
-            recompute()
-        elif ev.type == ecodes.EV_KEY and ev.value in (0, 1):
-            if ev.code == LB_BTN:   st["lb"] = bool(ev.value); recompute()
-            elif ev.code == RB_BTN: st["rb"] = bool(ev.value); recompute()
+    try:
+        for ev in dev.read_loop():
+            if ev.type == ecodes.EV_ABS:
+                if ev.code == LT_AXIS:
+                    st["lt"] = True if ev.value >= TRIG_ON else (False if ev.value <= TRIG_OFF else st["lt"])
+                elif ev.code == RT_AXIS:
+                    st["rt"] = True if ev.value >= TRIG_ON else (False if ev.value <= TRIG_OFF else st["rt"])
+                else:
+                    continue
+                recompute()
+            elif ev.type == ecodes.EV_KEY and ev.value in (0, 1):
+                if ev.code == LB_BTN:   st["lb"] = bool(ev.value); recompute()
+                elif ev.code == RB_BTN: st["rb"] = bool(ev.value); recompute()
+    except OSError:
+        cleanup()
 
 if __name__ == "__main__":
     sys.exit(main())
