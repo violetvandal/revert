@@ -72,6 +72,21 @@ install_glyphfix() {  # $1 = install dir
   [[ -f "$asi" ]] && cp -f "$asi" "$dest/VV.GlyphFix.asi" && log "  installed VV.GlyphFix.asi -> scripts/"
 }
 
+# VV.KeyboardGrid — controller/keyboard text entry for PC text screens (create-a-skater name,
+# save names, arcade initials). Auto-detects an active text field and drives the game's own
+# WM_CHAR path from the controller (DirectInput) or F-keys. See tools/keyboardgrid/keyboardgrid.cpp.
+install_keyboardgrid() {  # $1 = install dir
+  local dest="$1/scripts"
+  [[ -d "$dest" ]] || return 0
+  local src="$ROOT/tools/keyboardgrid/keyboardgrid.cpp" asi="$ROOT/tools/keyboardgrid/VV.KeyboardGrid.asi"
+  if command -v i686-w64-mingw32-g++ >/dev/null && [[ -f "$src" ]]; then
+    i686-w64-mingw32-g++ -O2 -shared -static -static-libgcc -static-libstdc++ -masm=att \
+      -o "$asi" "$src" -ldinput8 -ldxguid -lole32 -luser32 -lkernel32 2>/dev/null && log "  built VV.KeyboardGrid.asi" \
+      || log "  (VV.KeyboardGrid build failed; using prebuilt if present)"
+  fi
+  [[ -f "$asi" ]] && cp -f "$asi" "$dest/VV.KeyboardGrid.asi" && log "  installed VV.KeyboardGrid.asi -> scripts/"
+}
+
 # CAS asset mods that live OUTSIDE the .ns/.qb mod pipeline (texture recolours in the
 # skater model archives). Re-applied here so a rebuild keeps them. See the script's
 # header for why the panty is the white region of bb850270 in Skater_F_pvlegs.
@@ -128,6 +143,8 @@ if (( FAST )); then
   install_hudfix "$DEST"
   log "      controller glyphs for trick combos"
   install_glyphfix "$DEST"
+  log "      controller text entry (name/initials screens)"
+  install_keyboardgrid "$DEST"
   log "Done (--fast). Play: $ROOT/run-playable-ge.sh"
   exit 0
 fi
@@ -153,6 +170,8 @@ log "     HUD fix (top-left score on widescreen)"
 install_hudfix "$DEST"
 log "     controller glyphs for trick combos"
 install_glyphfix "$DEST"
+log "     controller text entry (name/initials screens)"
+install_keyboardgrid "$DEST"
 
 if [[ -f "$HQ_AUDIO_PACK" ]]; then
   log "5/5  HQ audio/video patch"

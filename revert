@@ -157,12 +157,13 @@ cmd_build() {
   local nocd_arg=();  [[ -f "$NOCD_EXE" ]] && nocd_arg=(--no-cd "$NOCD_EXE")
   local hud_arg=();   [[ -f "$HUDFIX_ASI" ]] && hud_arg=(--hudfix "$HUDFIX_ASI")
   local glyph_arg=(); [[ -f "${GLYPHFIX_ASI:-}" ]] && glyph_arg=(--glyphfix "$GLYPHFIX_ASI")
+  local kbd_arg=();   [[ -f "${KEYBOARDGRID_ASI:-}" ]] && kbd_arg=(--keyboardgrid "$KEYBOARDGRID_ASI")
   local tags_arg=();  [[ -d "$TAGS_DIR" ]] && tags_arg=(--tags "$TAGS_DIR")
 
   log "build lane=$lane${fast:+ (fast)} -> $edition"
   "$THUGKIT" build "$edition" --pristine "$PRISTINE_DIR" --mods "$MODS_DIR" \
     $fast "${nocd_arg[@]}" "${wsfix_arg[@]}" "${hq_arg[@]}" "${hud_arg[@]}" \
-    "${glyph_arg[@]}" "${tags_arg[@]}" "${only_arg[@]}" || err "thugkit build failed"
+    "${glyph_arg[@]}" "${kbd_arg[@]}" "${tags_arg[@]}" "${only_arg[@]}" || err "thugkit build failed"
 
   cas_post_pass "$edition"
   install_credits_movies "$edition"
