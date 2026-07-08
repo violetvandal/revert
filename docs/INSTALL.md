@@ -3,6 +3,11 @@
 Revert ships **tooling, not game data**. You must own Tony Hawk's Underground 2 (PC).
 Some optional enhancements are user-supplied (see below).
 
+> **Just want the easy path?** Download the graphical installer
+> ([`revert-installer-linux-amd64`](https://github.com/violetvandal/revert/releases/latest))
+> or run the one-command bootstrap (`bash <(curl -fsSL …/install.sh)`) — both do everything
+> below for you. This document is the **manual / CLI** reference for driving each step yourself.
+
 ## Prerequisites
 - Linux (Fedora is the tested/flagship target; other distros: install the equivalents).
 - A **GE-Proton / wine-ge** runner (via Lutris or ProtonUp-Qt). System Fedora wine is

@@ -1,23 +1,41 @@
 # THUG2: Violet Vandal Edition — Steam Deck
 
-The Deck is the flagship target, and the install is **turnkey**: build the edition on
-your PC, push it to the Deck, run one setup command, launch from Steam. Full analog
-controller, widescreen, the QOL mods — all automatic.
+The Deck is the flagship target, and the install is **turnkey** — full analog controller,
+widescreen, and the QOL mods, all automatic. There are two ways in: the **download-and-click
+installer** (easiest, no terminal, just the Deck) or a **build-on-a-PC-and-sync** flow (for
+people already running Revert on a Linux PC).
 
-Everything Deck-specific is handled by `revert setup` auto-detecting the hardware
+Everything Deck-specific is handled automatically by detecting the hardware
 (DMI board `Jupiter`/`Galileo`). You do not hand-edit anything.
 
 ---
 
-## TL;DR install
+## Easiest: the download-and-click installer
 
-**On your build PC** (where you already run Revert):
+No terminal and no second computer — just the Deck.
+
+1. In **Desktop Mode**, open Firefox and download the installer:
+   **[`revert-installer-linux-amd64`](https://github.com/violetvandal/revert/releases/latest)**
+   (under *Assets* on the latest release).
+2. In Dolphin, right-click it → **Properties → Permissions → Is executable**, then double-click it.
+3. A wizard opens in your browser. Give it three things — where to install, a password (it
+   **creates your Deck password** if you don't have one yet), and a link or folder for your own
+   THUG2 copy — then press **Install & build**. It installs Wine, fetches your game, builds the
+   edition, and calibrates the controller, keeping the Deck awake the whole time. No terminal at
+   any point.
+4. When it finishes, it tells you to **switch to Gaming Mode** and find **"Tony Hawk's Underground
+   2 (VV Edition)"** under your Non-Steam games. Launch it and play.
+
+---
+
+## Advanced: build on a PC and sync
+
+If you already run Revert on a Linux PC, build there and push to the Deck:
 ```sh
 ./revert build                              # build the QOL edition (game-playable-us)
 tools/deck/sync-to-deck.sh                  # rsync it + the toolkit to deck@<ip>:thug2
 ```
-
-**On the Deck, in Desktop Mode** — double-click **`tools/deck/Install-THUG2-Violet-Vandal.desktop`** in Dolphin (or run `cd ~/thug2 && ./revert setup` in Konsole). **Keep Steam open** so the Steam+X on-screen keyboard is available for the one sudo prompt; setup handles closing/reopening Steam itself when it writes the shortcut.
+Then **on the Deck, in Desktop Mode** — double-click **`tools/deck/Install-THUG2-Violet-Vandal.desktop`** in Dolphin (or run `cd ~/thug2 && ./revert setup` in Konsole). **Keep Steam open** so the Steam on-screen keyboard is available for the one sudo prompt; this manual setup closes and reopens Steam itself when it writes the shortcut. (The graphical installer above instead leaves Steam closed and hands you straight back to Gaming Mode.)
 
 Then **switch to Gaming Mode and launch "Tony Hawk's Underground 2 (VV Edition)"** from
 your library — it shows up with a proper cover/hero/logo, not a blank tile. That's it.
