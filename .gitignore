@@ -85,6 +85,7 @@ revert.conf.local
 
 # GUI installer build output
 gui/revert-gui
+gui/dist/
 
 # acquire --url temp workdir (auto-cleaned on graceful exit; lingers if a download is killed)
 .revert-acquire.*/

@@ -24,7 +24,13 @@ source "${REVERT_ROOT}/revert.conf"
 log()  { printf '\033[1;34m[setup]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[setup:warn]\033[0m %s\n' "$*" >&2; }
 err()  { printf '\033[1;31m[setup:error]\033[0m %s\n' "$*" >&2; exit 1; }
-ask_sudo() { log "running as root: $*"; sudo "$@"; }
+# Run a command as root. When SUDO_ASKPASS is set (the GUI installer points it at a
+# helper that supplies the password), use `sudo -A` so no terminal prompt is needed;
+# otherwise fall back to a normal interactive sudo.
+ask_sudo() {
+  log "running as root: $*"
+  if [[ -n "${SUDO_ASKPASS:-}" ]]; then sudo -A "$@"; else sudo "$@"; fi
+}
 
 # Steam Deck? (Game-Mode env, or DMI board name Jupiter=LCD / Galileo=OLED)
 is_steam_deck() {

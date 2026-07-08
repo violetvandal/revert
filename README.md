@@ -30,6 +30,17 @@ widescreen + analog controller, no manual steps. See [docs/STEAMDECK.md](docs/ST
 The installer clones into `~/thug2` and symlinks `revert` into `~/.local/bin`, so after
 setup you can run `revert <cmd>` from anywhere (the examples below drop the `./`).
 
+### …or click, don't type
+Prefer not to touch a terminal? **Download the installer** and run it — a graphical
+wizard does everything the command above does, with a live progress log. It asks for just
+three things (where to install, your account password, and a link/folder for your THUG2
+copy), then sets up Wine, fetches your game, and builds the edition. On a fresh Steam Deck
+it even sets your account password for you and handles the one `sudo` step with no
+terminal. Grab `revert-installer-linux-amd64` from the
+[latest release](https://github.com/violetvandal/revert/releases/latest), mark it
+executable (right-click → *Properties → Permissions → Is executable*, or `chmod +x`), and
+double-click it.
+
 ## Quick start (already cloned)
 If you cloned the repo yourself (`git clone --recursive`), drive the lifecycle directly:
 ```sh

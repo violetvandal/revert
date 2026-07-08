@@ -288,6 +288,28 @@ EOF
   fi
 }
 
+# ---- build-installer: cross-compile the standalone GUI installer (maintainer) ---
+# Produces one static, dependency-free binary a beginner can DOWNLOAD and double-click
+# to install the whole edition GUI-first (no terminal, no clone — the binary bootstraps
+# everything). Publish it as a GitHub Release asset. Defaults to linux/amd64 (Deck +
+# desktop); pass extra targets like: revert build-installer linux/amd64 windows/amd64
+cmd_build_installer() {
+  command -v go >/dev/null || err "build-installer needs the Go toolchain."
+  local dir="${REVERT_ROOT}/gui" out="${REVERT_ROOT}/gui/dist"
+  mkdir -p "$out"
+  local targets=("$@"); [[ ${#targets[@]} -eq 0 ]] && targets=("linux/amd64")
+  local t goos goarch name
+  for t in "${targets[@]}"; do
+    goos="${t%%/*}"; goarch="${t##*/}"
+    name="revert-installer-${goos}-${goarch}"; [[ "$goos" == "windows" ]] && name="${name}.exe"
+    log "building $name"
+    ( cd "$dir" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+        go build -trimpath -ldflags='-s -w' -o "$out/$name" . ) || err "build failed for $t"
+  done
+  log "installer binaries in $out:"; ls -1sh "$out"
+  note "Upload as a GitHub Release asset; the website /install button links to it."
+}
+
 case "${1:-help}" in
   doctor)            shift; cmd_doctor "$@";;
   setup)             shift; cmd_setup "$@";;
@@ -299,6 +321,7 @@ case "${1:-help}" in
   run)               shift; cmd_run "$@";;
   gui)               shift; cmd_gui "$@";;
   install-desktop)   shift; cmd_install_desktop "$@";;
+  build-installer)   shift; cmd_build_installer "$@";;
   calibrate-controller) shift; cmd_calibrate "$@";;
   tag)               shift; cmd_tag "$@";;
   help|-h|--help)    usage 0;;

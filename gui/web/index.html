@@ -28,13 +28,19 @@
   .status b { color:var(--bone); font-weight:600; }
   .dot { width:8px; height:8px; border-radius:50%; background:var(--ash); flex:none; }
   .dot.ok { background:var(--ok); } .dot.bad { background:var(--blood); }
-  main { display:grid; grid-template-columns:300px 1fr; gap:16px; padding:6px 24px 24px; flex:1; min-height:0; }
+  main, .wizard { display:grid; grid-template-columns:300px 1fr; gap:16px; padding:6px 24px 24px; flex:1; min-height:0; }
+  .wizard { grid-template-columns:minmax(320px,430px) 1fr; }
+  @media (max-width:760px){ main, .wizard { grid-template-columns:1fr; } }
   .steps { display:flex; flex-direction:column; gap:10px; overflow:auto; }
   .card { border:1px solid var(--line); border-radius:12px; background:rgba(23,16,42,.55); padding:12px; }
   .card h3 { margin:0 0 2px; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--grape-soft); }
   .card p { margin:0 0 10px; font-size:12px; color:var(--ash); }
   .card .controls { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
-  input[type=text], select { background:#120c22; color:var(--bone); border:1px solid var(--line);
+  .wizcard { overflow:auto; }
+  .wizcard h3 { font-size:15px; text-transform:none; letter-spacing:0; color:var(--bone); margin-bottom:4px; }
+  label.fld { display:block; font-size:12px; color:var(--grape-soft); font-weight:600; margin:12px 0 0; letter-spacing:.02em; }
+  label.fld .controls { margin:5px 0 0; }
+  input[type=text], input[type=password], select { background:#120c22; color:var(--bone); border:1px solid var(--line);
     border-radius:8px; padding:6px 8px; font-size:12.5px; flex:1; min-width:0; }
   label.chk { font-size:12px; color:var(--ash); display:flex; gap:5px; align-items:center; cursor:pointer; }
   button.act { width:100%; border:1px solid var(--grape); background:rgba(162,75,255,.14);
@@ -42,6 +48,7 @@
     transition:.15s; font-size:13px; }
   button.act:hover:not(:disabled) { background:rgba(162,75,255,.28); color:var(--bone); }
   button.act:disabled { opacity:.4; cursor:not-allowed; }
+  #wizInstall { padding:11px 10px; font-size:14px; }
   button.browse { flex:none; background:#120c22; color:var(--grape-soft); border:1px solid var(--line);
     border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; }
   button.browse:hover:not(:disabled) { border-color:var(--grape); color:var(--bone); }
@@ -50,6 +57,8 @@
   .card.done h3::after { content:' ✓'; color:var(--ok); }
   .lock { margin-top:8px; font-size:11.5px; color:var(--warn); }
   .hint { margin-top:8px; font-size:11px; color:var(--ash); line-height:1.4; }
+  .banner { margin:10px 0 0; padding:8px 10px; border:1px solid rgba(245,197,24,.4); border-radius:9px;
+    background:rgba(245,197,24,.08); color:var(--warn); font-size:11.5px; }
   .progress { height:3px; background:rgba(162,75,255,.12); overflow:hidden; }
   .progress .pfill { height:100%; width:35%; border-radius:3px;
     background:linear-gradient(90deg,transparent,var(--grape),var(--grape-soft),var(--grape),transparent); }
@@ -67,7 +76,6 @@
   .badge.run { color:var(--warn); border-color:rgba(245,197,24,.4); }
   .badge.ok  { color:var(--ok);  border-color:rgba(87,211,140,.4); }
   .badge.bad { color:var(--blood); border-color:rgba(232,59,92,.4); }
-  @media (max-width:760px){ main{ grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -78,10 +86,59 @@
 
   <div class="status">
     <span class="dot" id="rootDot"></span>
-    <span>toolkit root:</span> <b id="rootPath">…</b>
+    <span id="rootLabel">toolkit root:</span> <b id="rootPath">…</b>
   </div>
 
-  <main>
+  <!-- ── First-run install wizard (shown when the toolkit isn't installed yet) ── -->
+  <section class="wizard" id="wizard" hidden>
+    <div class="card wizcard">
+      <h3>Set up your edition</h3>
+      <p>One click does everything: Wine, controller, your game files, and the mods — no terminal.</p>
+      <div class="banner" id="deckNote" hidden>Steam Deck detected. Do this in <b>Desktop Mode</b>; you'll switch to Gaming Mode to play.</div>
+
+      <label class="fld">Install location
+        <div class="controls"><input type="text" id="wizDir" placeholder="~/thug2" /></div>
+      </label>
+
+      <div id="pwBlock">
+        <label class="fld" id="pwLabel">Your account password
+          <div class="controls"><input type="password" id="wizPw" placeholder="password" autocomplete="off" /></div>
+        </label>
+        <label class="fld" id="pwConfirmLabel" hidden>Repeat password
+          <div class="controls"><input type="password" id="wizPw2" placeholder="repeat password" autocomplete="off" /></div>
+        </label>
+        <div class="hint" id="pwHint">Needed once — setup installs a few system libraries (sudo). It stays on this machine.</div>
+      </div>
+
+      <label class="fld">Your THUG2 copy
+        <div class="controls">
+          <input type="text" id="wizPath" placeholder="/path/to/your/THUG2 folder" />
+          <button class="browse" id="wizBrowse" type="button">Browse…</button>
+        </div>
+        <div class="controls">
+          <input type="text" id="wizUrl" placeholder="…or paste a link to a .zip / .7z / .iso" />
+        </div>
+      </label>
+      <div class="hint">Revert ships no game data — bring your own copy. A link is fetched as-is (like curl); you're responsible for the right to those files.</div>
+
+      <button class="act" id="wizInstall">Install &amp; build</button>
+      <div class="lock" id="wizErr" hidden></div>
+    </div>
+
+    <section class="console">
+      <div class="bar">
+        <span class="run" id="wizRunning">idle</span>
+        <span class="spacer"></span>
+        <span class="badge" id="wizBadge" style="display:none"></span>
+      </div>
+      <div class="progress" id="wizProgress"><div class="pfill"></div></div>
+      <pre id="wizLog"><span class="cmd">Fill in the fields above, then press Install. Progress streams here — it takes a while (Wine, download, build).</span>
+</pre>
+    </section>
+  </section>
+
+  <!-- ── Management view (shown once the toolkit is installed) ── -->
+  <main id="manage" hidden>
     <section class="steps" id="steps">
       <div class="card" id="card-doctor">
         <h3>1 · Doctor</h3><p>Check prerequisites (read-only).</p>
@@ -137,40 +194,62 @@
   </main>
 
 <script>
-const log = document.getElementById('log');
-const running = document.getElementById('running');
-const badge = document.getElementById('badge');
-let es = null;
+// activeLog / activeProgress / activeRunning / activeBadge point at whichever view
+// (wizard or management) is on screen, so the shared stream helpers target it.
+let activeLog, activeProgress, activeRunning, activeBadge;
 
 function append(text, cls) {
-  // The <pre> is itself the scroll container. Stick to the bottom while the user
-  // is already near it, so live output follows without us chasing it — but don't
-  // yank them down if they've scrolled up to read something.
-  const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+  const el = activeLog; if (!el) return;
+  const stick = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
   const span = document.createElement('span');
   if (cls) span.className = cls;
   span.textContent = text + "\n";
-  log.appendChild(span);
-  if (stick) log.scrollTop = log.scrollHeight;
+  el.appendChild(span);
+  if (stick) el.scrollTop = el.scrollHeight;
 }
+
 let busy = false;
 let state = {};
 
 function setBusy(b) {
   busy = b;
-  running.textContent = b ? 'running…' : 'idle';
-  document.getElementById('progress').classList.toggle('on', b);
-  if (b) document.querySelectorAll('button.act[data-cmd]').forEach(x => x.disabled = true);
-  else applyGating();
+  if (activeRunning) activeRunning.textContent = b ? 'running…' : 'idle';
+  if (activeProgress) activeProgress.classList.toggle('on', b);
 }
 
-// Guard against losing a running command to an accidental tab/window close.
 window.addEventListener('beforeunload', e => {
   if (busy) { e.preventDefault(); e.returnValue = ''; }
 });
 
-// Reflect lifecycle state: mark completed steps ✓ and lock steps whose
-// prerequisites aren't met yet, so the flow reads top-to-bottom.
+// Common SSE consumer. onDone(exitCode) fires after the stream closes.
+function stream(url, onDone) {
+  const es = new EventSource(url);
+  es.addEventListener('start', e => append('$ ' + e.data, 'cmd'));
+  es.addEventListener('log', e => append(e.data));
+  es.addEventListener('error', e => { if (e.data) append(e.data, 'err'); });
+  es.addEventListener('done', e => {
+    es.close();
+    const ok = e.data === '0';
+    if (activeBadge) {
+      activeBadge.style.display = 'inline-block';
+      activeBadge.className = 'badge ' + (ok ? 'ok' : 'bad');
+      activeBadge.textContent = ok ? 'done ✓' : ('exit ' + e.data);
+    }
+    append(ok ? '— done —' : '— failed (exit ' + e.data + ') —', ok ? 'cmd' : 'err');
+    onDone(e.data);
+  });
+  es.onerror = () => { es.close(); onDone('1'); };
+  return es;
+}
+
+// ── management view ──────────────────────────────────────────────────────────
+function useManage() {
+  activeLog = document.getElementById('log');
+  activeProgress = document.getElementById('progress');
+  activeRunning = document.getElementById('running');
+  activeBadge = document.getElementById('badge');
+}
+
 function applyGating() {
   const card = id => document.getElementById(id);
   const gate = (id, done, enabled, hint) => {
@@ -181,7 +260,6 @@ function applyGating() {
     const lock = c.querySelector('.lock');
     if (lock) { lock.hidden = enabled; if (!enabled && hint) lock.textContent = hint; }
   };
-  // Always-available steps just clear their busy-disable.
   ['card-doctor', 'card-update'].forEach(id => {
     const btn = card(id).querySelector('button.act[data-cmd]'); if (btn) btn.disabled = busy;
   });
@@ -202,8 +280,7 @@ function argsFor(btn) {
   if (spec === 'source') {
     const u = document.getElementById('gameUrl').value.trim();
     const p = document.getElementById('gamePath').value.trim();
-    if (u) out.push('--url', u);
-    else if (p) out.push('--folder', p);
+    if (u) out.push('--url', u); else if (p) out.push('--folder', p);
   }
   if (spec === 'fast' && document.getElementById('fast').checked) out.push('--fast');
   if (spec === 'lane') out.push(document.getElementById('lane').value);
@@ -211,48 +288,142 @@ function argsFor(btn) {
   return out;
 }
 
-function run(cmd, args) {
-  if (es) es.close();
-  badge.style.display = 'none';
+function runCmd(cmd, args) {
+  if (activeBadge) activeBadge.style.display = 'none';
   setBusy(true);
+  document.querySelectorAll('#manage button.act[data-cmd]').forEach(x => x.disabled = true);
   const qs = new URLSearchParams(); qs.set('cmd', cmd);
   args.forEach(a => qs.append('arg', a));
-  es = new EventSource('/api/stream?' + qs.toString());
-  es.addEventListener('start', e => append('$ ' + e.data, 'cmd'));
-  es.addEventListener('log', e => append(e.data));
-  es.addEventListener('error', e => append(e.data || '(stream error)', 'err'));
-  es.addEventListener('done', e => {
-    es.close(); es = null;
+  stream('/api/stream?' + qs.toString(), () => {
     refreshStatus().finally(() => setBusy(false));
-    const ok = e.data === '0';
-    badge.style.display = 'inline-block';
-    badge.className = 'badge ' + (ok ? 'ok' : 'bad');
-    badge.textContent = ok ? 'done ✓' : ('exit ' + e.data);
-    append(ok ? '— done —' : '— failed (exit ' + e.data + ') —', ok ? 'cmd' : 'err');
   });
-  es.onerror = () => { if (es) { es.close(); es = null; } setBusy(false); };
 }
 
-document.querySelectorAll('button.act[data-cmd]').forEach(btn => {
-  btn.addEventListener('click', () => run(btn.dataset.cmd, argsFor(btn)));
-});
-document.getElementById('clear').addEventListener('click', () => { log.textContent = ''; badge.style.display='none'; });
+function wireManage() {
+  document.querySelectorAll('#manage button.act[data-cmd]').forEach(btn => {
+    btn.addEventListener('click', () => runCmd(btn.dataset.cmd, argsFor(btn)));
+  });
+  document.getElementById('clear').addEventListener('click', () => {
+    document.getElementById('log').textContent = ''; document.getElementById('badge').style.display = 'none';
+  });
+  document.getElementById('browse').addEventListener('click', () => pickInto('gamePath', 'browse'));
+}
 
-document.getElementById('browse').addEventListener('click', () => {
-  const b = document.getElementById('browse'); b.disabled = true; b.textContent = '…';
+function showManage() {
+  document.getElementById('wizard').hidden = true;
+  document.getElementById('manage').hidden = false;
+  document.getElementById('rootLabel').textContent = 'toolkit root:';
+  useManage();
+  refreshStatus();
+}
+
+// ── install wizard ─────────────────────────────────────────────────────────
+function useWizard() {
+  activeLog = document.getElementById('wizLog');
+  activeProgress = document.getElementById('wizProgress');
+  activeRunning = document.getElementById('wizRunning');
+  activeBadge = document.getElementById('wizBadge');
+}
+
+let createPw = false; // true → account has no password yet, so confirm + set it
+
+function showWizard(info) {
+  document.getElementById('manage').hidden = true;
+  document.getElementById('wizard').hidden = false;
+  document.getElementById('rootLabel').textContent = 'will install to:';
+  document.getElementById('rootPath').textContent = info.defaultDir || '~/thug2';
+  document.getElementById('wizDir').value = info.defaultDir || '';
+  document.getElementById('deckNote').hidden = !info.isSteamDeck;
+  useWizard();
+  fetch('/api/pwstatus').then(r => r.json()).then(p => {
+    createPw = !!p.noPassword;
+    document.getElementById('pwConfirmLabel').hidden = !createPw;
+    document.getElementById('pwLabel').childNodes[0].nodeValue =
+      createPw ? 'Create a password' : 'Your account password';
+    document.getElementById('pwHint').textContent = createPw
+      ? "Your account has no password yet — pick one now. Setup needs it (installs a few system libraries), and you'll use it to unlock the Deck."
+      : "Needed once — setup installs a few system libraries (sudo). It stays on this machine.";
+  }).catch(() => {});
+}
+
+function wizError(msg) {
+  const e = document.getElementById('wizErr'); e.hidden = false; e.textContent = msg;
+}
+
+function wireWizard() {
+  document.getElementById('wizBrowse').addEventListener('click', () => pickInto('wizPath', 'wizBrowse'));
+  document.getElementById('wizInstall').addEventListener('click', startInstall);
+}
+
+function startInstall() {
+  document.getElementById('wizErr').hidden = true;
+  const dir = document.getElementById('wizDir').value.trim();
+  const pw = document.getElementById('wizPw').value;
+  const url = document.getElementById('wizUrl').value.trim();
+  const path = document.getElementById('wizPath').value.trim();
+  const src = url || path;
+  if (!pw) return wizError('Enter your account password.');
+  if (createPw && pw !== document.getElementById('wizPw2').value)
+    return wizError('The two passwords don’t match.');
+  if (!src) return wizError('Point us at your THUG2 copy — a folder or a download link.');
+
+  setBusy(true);
+  activeBadge.style.display = 'none';
+  document.getElementById('wizInstall').disabled = true;
+  ['wizDir','wizPw','wizPw2','wizUrl','wizPath','wizBrowse'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.disabled = true;
+  });
+
+  fetch('/api/install/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dir, password: pw, src }),
+  }).then(async r => {
+    if (!r.ok) throw new Error((await r.text()).trim() || 'could not start install');
+    return r.json();
+  }).then(j => {
+    stream('/api/install/stream?token=' + encodeURIComponent(j.token), code => {
+      setBusy(false);
+      if (code === '0') {
+        append('Switching to the play menu…', 'cmd');
+        setTimeout(() => fetch('/api/info').then(r => r.json()).then(info => {
+          document.getElementById('rootDot').className = 'dot ' + (info.revertFound ? 'ok' : 'bad');
+          if (info.revertFound) { document.getElementById('rootPath').textContent = info.root; showManage(); }
+        }), 900);
+      } else {
+        document.getElementById('wizInstall').disabled = false;
+        ['wizDir','wizPw','wizPw2','wizUrl','wizPath','wizBrowse'].forEach(id => {
+          const el = document.getElementById(id); if (el) el.disabled = false;
+        });
+      }
+    });
+  }).catch(err => {
+    setBusy(false);
+    document.getElementById('wizInstall').disabled = false;
+    ['wizDir','wizPw','wizPw2','wizUrl','wizPath','wizBrowse'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.disabled = false;
+    });
+    wizError(err.message);
+  });
+}
+
+// Shared native folder picker → fills a text input.
+function pickInto(targetId, btnId) {
+  const b = document.getElementById(btnId); b.disabled = true; b.textContent = '…';
   fetch('/api/pick').then(r => r.json()).then(j => {
-    if (j.path) document.getElementById('gamePath').value = j.path;
+    if (j.path) document.getElementById(targetId).value = j.path;
     else if (j.error) append('⚠ ' + j.error, 'err');
   }).catch(() => {}).finally(() => { b.disabled = false; b.textContent = 'Browse…'; });
-});
+}
 
+// ── boot ──────────────────────────────────────────────────────────────────────
+wireManage();
+wireWizard();
 fetch('/api/info').then(r => r.json()).then(info => {
-  document.getElementById('rootPath').textContent = info.root;
+  document.getElementById('rootPath').textContent = info.root || info.defaultDir || '…';
   document.getElementById('rootDot').className = 'dot ' + (info.revertFound ? 'ok' : 'bad');
-  if (!info.revertFound) append('⚠ revert dispatcher not found under ' + info.root, 'err');
-}).catch(() => {});
-
-refreshStatus();
+  if (info.revertFound) showManage(); else showWizard(info);
+}).catch(() => { useManage(); showManage(); });
 </script>
 </body>
 </html>

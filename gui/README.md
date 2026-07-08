@@ -8,6 +8,33 @@ It serves a local web page and drives the `revert` lifecycle
 command's output **live** into a console via Server-Sent Events. The CLI is the seam:
 the GUI adds no logic of its own.
 
+**Two faces, one binary.** If a toolkit clone is present it shows the management panel
+above. If it's run on its own with nothing installed yet (a **downloaded** binary), it
+shows a **first-run install wizard** instead — the "just download and click" path for
+people with no terminal experience (see below).
+
+## Download-and-click installer (no terminal, Steam-Deck friendly)
+A prebuilt, statically-linked binary a beginner can download and run to install the
+whole edition GUI-first — no terminal, no `git`, no Go. On launch it opens the web UI's
+install wizard, which asks for three things: where to install, your account password,
+and a link/folder for your THUG2 copy. Then it:
+
+1. sets your account password if you don't have one yet (fresh Steam Decks have none),
+2. clones the toolkit + installs a local Go, and
+3. runs `setup → acquire → build → calibrate`, streaming progress live.
+
+The password is collected **once** and fed to `sudo` via `SUDO_ASKPASS` (a temp helper,
+shredded after) so the one system step needs no terminal. Under the hood it runs the
+same [`install.sh`](../install.sh) bootstrap in non-interactive `REVERT_DRIVEN=1` mode
+(it fetches the published `install.sh` when run outside a clone).
+
+Build the downloadable binary (maintainer):
+```sh
+./revert build-installer                     # → gui/dist/revert-installer-linux-amd64
+./revert build-installer linux/amd64 windows/amd64   # extra targets
+```
+Publish the artifact as a GitHub Release asset; the website `/install` page links to it.
+
 ## Run
 The easy way — from the toolkit root:
 ```sh

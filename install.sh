@@ -24,6 +24,10 @@ REPO_URL="${REVERT_REPO:-https://github.com/violetvandal/revert.git}"
 DEST="${REVERT_DIR:-$HOME/thug2}"
 GO_VER="${REVERT_GO_VER:-go1.23.5}"
 TTY=/dev/tty; [[ -e "$TTY" ]] || TTY=/dev/stdin
+# DRIVEN=1 → this run is driven by the GUI installer: no terminal, no keyboard prompts.
+# The password and game source arrive via REVERT_PASSWORD / REVERT_GAME_SRC, and sudo is
+# fed non-interactively through SUDO_ASKPASS (set by the GUI). See gui/main.go.
+DRIVEN="${REVERT_DRIVEN:-0}"
 
 p=$'\033[1;35m'; g=$'\033[1;32m'; y=$'\033[1;33m'; r=$'\033[1;31m'; d=$'\033[2m'; o=$'\033[0m'
 step() { printf '\n%s==>%s %s\n' "$p" "$o" "$*"; }
@@ -50,7 +54,7 @@ is_deck && info "Steam Deck detected." || info "Running on a Linux desktop."
 # Piping into bash (curl … | bash) makes the script itself bash's stdin, so the
 # password/sudo prompts would read the script instead of your keyboard. Require a
 # terminal and tell the user the right, still-one-line way to run it.
-if [[ ! -t 0 ]]; then
+if [[ "$DRIVEN" != 1 && ! -t 0 ]]; then
   die "Run this from a terminal so it can read your keyboard (for the password step).
   Use this one line instead of piping:
 
@@ -70,11 +74,24 @@ ok "git present"
 step "Checking your account password"
 pwstat="$(passwd -S 2>/dev/null | awk 'NR==1{print $2}')"
 if [[ "$pwstat" == "NP" || "$pwstat" == "L" ]]; then
-  warn "You don't have a password set yet — the setup step needs one (it installs a"
-  info "few system libraries). Let's set it now. Type a new password twice; nothing"
-  info "shows on screen as you type. Remember it — you'll use it for the setup step."
-  passwd </dev/tty || die "couldn't set a password. Run 'passwd' yourself, then re-run this installer."
-  ok "password set"
+  if [[ "$DRIVEN" == 1 ]]; then
+    [[ -n "${REVERT_PASSWORD:-}" ]] || die "no password provided (setup needs one to install a few system libraries)."
+    info "Setting your account password (needed for the one system step)."
+    # passwd reads from a controlling terminal, not a pipe — hand it a PTY via util-linux
+    # `script` and feed the new password twice. A fresh 'NP' account isn't asked for a
+    # current password, so two lines suffice.
+    if printf '%s\n%s\n' "$REVERT_PASSWORD" "$REVERT_PASSWORD" | script -qec passwd /dev/null >/dev/null 2>&1; then
+      ok "password set"
+    else
+      die "couldn't set your password automatically. Open Konsole and run 'passwd' once, then re-run the installer."
+    fi
+  else
+    warn "You don't have a password set yet — the setup step needs one (it installs a"
+    info "few system libraries). Let's set it now. Type a new password twice; nothing"
+    info "shows on screen as you type. Remember it — you'll use it for the setup step."
+    passwd </dev/tty || die "couldn't set a password. Run 'passwd' yourself, then re-run this installer."
+    ok "password set"
+  fi
 else
   ok "password is set"
 fi
@@ -133,8 +150,12 @@ if ./revert status --json 2>/dev/null | grep -q '"pristine":true'; then
   ok "game files already in place"
 else
   info "Revert ships no game data — point it at YOUR copy of THUG2."
-  info "Paste a download link to a .zip / .7z / .iso of your game, or a folder path."
-  src="$(ask 'game source (URL or folder path):')"
+  if [[ "$DRIVEN" == 1 ]]; then
+    src="${REVERT_GAME_SRC:-}"
+  else
+    info "Paste a download link to a .zip / .7z / .iso of your game, or a folder path."
+    src="$(ask 'game source (URL or folder path):')"
+  fi
   [[ -n "$src" ]] || die "no source given. When ready, run:  ./revert acquire-game-data --url <link>"
   case "$src" in
     http://*|https://*|ftp://*) ./revert acquire-game-data --url "$src" || die "download/acquire failed";;
