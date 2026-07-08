@@ -110,6 +110,17 @@ func defaultInstallDir() string {
 	return "thug2"
 }
 
+// newCmd builds a command, wrapped in `systemd-inhibit` when that's available, so a long
+// install or build isn't cut off by the Deck idle-suspending (logind sleep/idle inhibit,
+// which KDE's power management honors). Falls back to a plain command off systemd.
+func newCmd(why, name string, args ...string) *exec.Cmd {
+	if p, err := exec.LookPath("systemd-inhibit"); err == nil {
+		full := append([]string{"--what=idle:sleep", "--why=" + why, "--mode=block", name}, args...)
+		return exec.Command(p, full...)
+	}
+	return exec.Command(name, args...)
+}
+
 // guiEnv augments the process env with the local Go + bin dirs a fresh install drops,
 // so `revert build` (which needs the Go toolchain) works from the GUI post-install.
 func guiEnv() []string {
@@ -324,7 +335,7 @@ func installStreamHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sse(w, flusher, "start", "installing THUG2: Violet Vandal Edition → "+req.Dir)
-	c := exec.Command("bash", installSh)
+	c := newCmd("THUG2: Violet Vandal Edition is installing", "bash", installSh)
 	c.Env = append(guiEnv(),
 		"REVERT_DRIVEN=1",
 		"REVERT_DIR="+req.Dir,
@@ -448,7 +459,9 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 	args = append(args, r.URL.Query()["arg"]...)
 	sse(w, flusher, "start", "revert "+strings.Join(args, " "))
 
-	c := exec.Command(filepath.Join(root, "revert"), args...)
+	// Wrap in systemd-inhibit too: `build` is long and `run` should hold off suspend
+	// while the game is up.
+	c := newCmd("Revert: "+cmd, filepath.Join(root, "revert"), args...)
 	c.Dir = root
 	c.Env = append(guiEnv(), "REVERT_ROOT="+root, "TERM=dumb")
 	sse(w, flusher, "done", streamCmd(w, flusher, c))

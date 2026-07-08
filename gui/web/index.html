@@ -228,10 +228,23 @@ function append(text, cls) {
 let busy = false;
 let state = {};
 
+// Screen Wake Lock — keep the display from dimming/sleeping during a long install or
+// build. Works here because the page is served over 127.0.0.1 (a secure context). The
+// lock is auto-released if the tab is hidden, so re-acquire when it becomes visible.
+let wakeLock = null;
+async function acquireWakeLock() {
+  try { if ('wakeLock' in navigator && !wakeLock) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+}
+function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; } }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && busy) acquireWakeLock();
+});
+
 function setBusy(b) {
   busy = b;
   if (activeRunning) activeRunning.textContent = b ? 'running…' : 'idle';
   if (activeProgress) activeProgress.classList.toggle('on', b);
+  if (b) acquireWakeLock(); else releaseWakeLock();
 }
 
 window.addEventListener('beforeunload', e => {
