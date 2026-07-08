@@ -294,9 +294,16 @@ EOF
   else
     warn "  shortcut add failed — add manually: Add a Non-Steam Game -> $play"
   fi
+  # Reopen Steam only for a manual Desktop-Mode setup (restore the user's session). Under
+  # the GUI installer (REVERT_DRIVEN=1) leave it closed: reopening pops Steam in front of
+  # the installer, and the new shortcut is picked up anyway when they enter Gaming Mode.
   if (( reopen )); then
-    log "  reopening Steam…"
-    setsid steam >/dev/null 2>&1 < /dev/null &
+    if [[ "${REVERT_DRIVEN:-0}" == 1 ]]; then
+      log "  Steam left closed — your new shortcut appears when you switch to Gaming Mode"
+    else
+      log "  reopening Steam…"
+      setsid steam >/dev/null 2>&1 < /dev/null &
+    fi
   fi
 }
 

@@ -49,6 +49,11 @@
   button.act:hover:not(:disabled) { background:rgba(162,75,255,.28); color:var(--bone); }
   button.act:disabled { opacity:.4; cursor:not-allowed; }
   #wizInstall { padding:11px 10px; font-size:14px; }
+  .doneMsg { font-size:14px; color:var(--bone); margin:0 0 12px; }
+  .doneMsg b { color:var(--ok); }
+  .steps-list { margin:0 0 8px; padding-left:20px; color:var(--ash); font-size:12.5px; line-height:1.7; }
+  .steps-list li { margin-bottom:6px; }
+  .steps-list b { color:var(--bone); font-weight:600; }
   button.browse { flex:none; background:#120c22; color:var(--grape-soft); border:1px solid var(--line);
     border-radius:8px; padding:6px 10px; font-size:12px; cursor:pointer; }
   button.browse:hover:not(:disabled) { border-color:var(--grape); color:var(--bone); }
@@ -92,7 +97,8 @@
   <!-- ── First-run install wizard (shown when the toolkit isn't installed yet) ── -->
   <section class="wizard" id="wizard" hidden>
     <div class="card wizcard">
-      <h3>Set up your edition</h3>
+      <h3 id="wizTitle">Set up your edition</h3>
+      <div id="wizForm">
       <p>One click does everything: Wine, controller, your game files, and the mods — no terminal.</p>
       <div class="banner" id="deckNote" hidden>Steam Deck detected. Do this in <b>Desktop Mode</b>; you'll switch to Gaming Mode to play.</div>
 
@@ -123,6 +129,17 @@
 
       <button class="act" id="wizInstall">Install &amp; build</button>
       <div class="lock" id="wizErr" hidden></div>
+      </div><!-- /#wizForm -->
+
+      <div id="wizDone" hidden>
+        <p class="doneMsg">✓ <b>All set — your edition is installed and built.</b></p>
+        <ol class="steps-list">
+          <li><b>Return to Gaming Mode.</b> Double-click <b>“Return to Gaming Mode”</b> on the desktop (top-left), or click the <b>Steam</b> menu → <b>Switch to Game Mode</b>.</li>
+          <li><b>Find your game.</b> In Gaming Mode open your <b>Library</b> and look under <b>Non-Steam</b> games (or the <b>Collections</b> view) for <b>“Tony Hawk's Underground 2 (VV Edition)”</b>.</li>
+          <li><b>Press play.</b> Your controller is already calibrated — it should launch straight into widescreen.</li>
+        </ol>
+        <div class="hint">Not there? It's a non-Steam shortcut — try Library → “Non-Steam” filter. You can also relaunch this installer any time to re-run steps.</div>
+      </div>
     </div>
 
     <section class="console">
@@ -341,9 +358,37 @@ function showWizard(info) {
     document.getElementById('pwLabel').childNodes[0].nodeValue =
       createPw ? 'Create a password' : 'Your account password';
     document.getElementById('pwHint').textContent = createPw
-      ? "Your account has no password yet — pick one now. Setup needs it (installs a few system libraries), and you'll use it to unlock the Deck."
+      ? "Your account has no password yet — pick one now (at least 8 characters, not all numbers). Setup needs it (installs a few system libraries), and you'll use it to unlock the Deck."
       : "Needed once — setup installs a few system libraries (sudo). It stays on this machine.";
+    validateWizard();
   }).catch(() => {});
+}
+
+// The system (PAM) rejects weak passwords when CREATING one, which fails setup deep in
+// the install. Enforce the common rules up front so a bad password can't start a run.
+function pwProblem(pw) {
+  if (pw.length < 8) return 'Password must be at least 8 characters.';
+  if (/^\d+$/.test(pw)) return 'Password can’t be all numbers — add some letters.';
+  return '';
+}
+
+// Live-validate the wizard: compute the first blocking problem, gate the Install button,
+// and show the reason once the user has engaged (don't nag an untouched form).
+function validateWizard() {
+  const pw = document.getElementById('wizPw').value;
+  const pw2 = document.getElementById('wizPw2').value;
+  const src = document.getElementById('wizUrl').value.trim() || document.getElementById('wizPath').value.trim();
+  let problem = '', touched = pw.length > 0;
+  if (createPw) {
+    problem = pwProblem(pw) || (pw !== pw2 ? 'The two passwords don’t match.' : '');
+  } else if (!pw) {
+    problem = 'Enter your account password.';
+  }
+  if (!problem && !src) { problem = 'Add your THUG2 copy — a folder or a download link.'; }
+  document.getElementById('wizInstall').disabled = busy || !!problem;
+  const err = document.getElementById('wizErr');
+  if (problem && touched) { err.hidden = false; err.textContent = problem; }
+  else if (!busy) { err.hidden = true; }
 }
 
 function wizError(msg) {
@@ -353,6 +398,8 @@ function wizError(msg) {
 function wireWizard() {
   document.getElementById('wizBrowse').addEventListener('click', () => pickInto('wizPath', 'wizBrowse'));
   document.getElementById('wizInstall').addEventListener('click', startInstall);
+  ['wizPw', 'wizPw2', 'wizUrl', 'wizPath'].forEach(id =>
+    document.getElementById(id).addEventListener('input', validateWizard));
 }
 
 function startInstall() {
@@ -363,8 +410,11 @@ function startInstall() {
   const path = document.getElementById('wizPath').value.trim();
   const src = url || path;
   if (!pw) return wizError('Enter your account password.');
-  if (createPw && pw !== document.getElementById('wizPw2').value)
-    return wizError('The two passwords don’t match.');
+  if (createPw) {
+    const p = pwProblem(pw);
+    if (p) return wizError(p);
+    if (pw !== document.getElementById('wizPw2').value) return wizError('The two passwords don’t match.');
+  }
   if (!src) return wizError('Point us at your THUG2 copy — a folder or a download link.');
 
   setBusy(true);
@@ -385,11 +435,21 @@ function startInstall() {
     stream('/api/install/stream?token=' + encodeURIComponent(j.token), code => {
       setBusy(false);
       if (code === '0') {
-        append('Switching to the play menu…', 'cmd');
-        setTimeout(() => fetch('/api/info').then(r => r.json()).then(info => {
+        fetch('/api/info').then(r => r.json()).then(info => {
           document.getElementById('rootDot').className = 'dot ' + (info.revertFound ? 'ok' : 'bad');
-          if (info.revertFound) { document.getElementById('rootPath').textContent = info.root; showManage(); }
-        }), 900);
+          if (info.root) document.getElementById('rootPath').textContent = info.root;
+          if (info.isSteamDeck) {
+            // On a Deck, finish with the return-to-Gaming-Mode guidance — the desktop
+            // management panel isn't the flow there (you play from Gaming Mode).
+            document.getElementById('wizForm').hidden = true;
+            document.getElementById('wizErr').hidden = true;
+            document.getElementById('wizTitle').textContent = 'Installed — one more step';
+            document.getElementById('wizDone').hidden = false;
+          } else if (info.revertFound) {
+            append('Switching to the play menu…', 'cmd');
+            setTimeout(showManage, 700);
+          }
+        }).catch(() => {});
       } else {
         document.getElementById('wizInstall').disabled = false;
         ['wizDir','wizPw','wizPw2','wizUrl','wizPath','wizBrowse'].forEach(id => {
@@ -411,7 +471,7 @@ function startInstall() {
 function pickInto(targetId, btnId) {
   const b = document.getElementById(btnId); b.disabled = true; b.textContent = '…';
   fetch('/api/pick').then(r => r.json()).then(j => {
-    if (j.path) document.getElementById(targetId).value = j.path;
+    if (j.path) { document.getElementById(targetId).value = j.path; validateWizard(); }
     else if (j.error) append('⚠ ' + j.error, 'err');
   }).catch(() => {}).finally(() => { b.disabled = false; b.textContent = 'Browse…'; });
 }

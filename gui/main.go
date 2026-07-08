@@ -172,7 +172,18 @@ func infoHandler(w http.ResponseWriter, r *http.Request) {
 		"revertFound": root != "",
 		"defaultDir":  defaultInstallDir(),
 		"isSteamDeck": isSteamDeck(),
+		"desktopMode": isDesktopMode(),
 	})
+}
+
+// isDesktopMode reports a Steam Deck currently in Desktop Mode (KDE) rather than Gaming
+// Mode. Gaming Mode runs the gamescope compositor; Desktop Mode does not. Only meaningful
+// on a Deck (false elsewhere) — used to tell the user to switch back to Gaming Mode.
+func isDesktopMode() bool {
+	if !isSteamDeck() {
+		return false
+	}
+	return exec.Command("pgrep", "-x", "gamescope").Run() != nil // no gamescope → Desktop Mode
 }
 
 // statusHandler runs `revert status --json` and forwards the lifecycle state the
