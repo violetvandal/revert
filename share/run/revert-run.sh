@@ -89,15 +89,20 @@ fi
 # Symlink ONLY libSDL2 into a private dir rather than prepending the full Steam runtime
 # to LD_LIBRARY_PATH — that runtime ships libvulkan.so.1 which shadows the system Vulkan
 # ICD and causes DXVK to fail with "Failed to create Vulkan instance".
-_sdl32_src="${HOME}/.local/share/Steam/ubuntu12_32/steam-runtime/usr/lib/i386-linux-gnu/libSDL2-2.0.so.0"
-_sdl32_dir="${HOME}/.local/lib/revert-sdl32"
-if [[ -f "${_sdl32_src}" ]]; then
-  mkdir -p "${_sdl32_dir}"
-  ln -sf "${_sdl32_src}" "${_sdl32_dir}/libSDL2-2.0.so.0"
+# Gate to OSTree/immutable distros (Bazzite, Silverblue, Kinoite) — only they lack a
+# 32-bit system SDL2. SteamOS/Steam Deck and Fedora/Arch desktops already ship it, so we
+# must NOT shadow it with the old Steam-runtime copy there (that would regress a working pad).
+if [[ -f /run/ostree-booted ]]; then
+  _sdl32_src="${HOME}/.local/share/Steam/ubuntu12_32/steam-runtime/usr/lib/i386-linux-gnu/libSDL2-2.0.so.0"
+  _sdl32_dir="${HOME}/.local/lib/revert-sdl32"
+  if [[ -f "${_sdl32_src}" ]]; then
+    mkdir -p "${_sdl32_dir}"
+    ln -sf "${_sdl32_src}" "${_sdl32_dir}/libSDL2-2.0.so.0"
+  fi
+  [[ -L "${_sdl32_dir}/libSDL2-2.0.so.0" ]] \
+    && export LD_LIBRARY_PATH="${_sdl32_dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+  unset _sdl32_src _sdl32_dir
 fi
-[[ -L "${_sdl32_dir}/libSDL2-2.0.so.0" ]] \
-  && export LD_LIBRARY_PATH="${_sdl32_dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-unset _sdl32_src _sdl32_dir
 
 # On Bazzite/OSTree, z: -> / is a composefs overlay that reports 0 bytes free.
 # Wine picks the longest-prefix drive match, so without a closer drive letter the
