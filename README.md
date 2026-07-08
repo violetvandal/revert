@@ -54,6 +54,13 @@ On a **Steam Deck**, if the controller ever comes up unbound, run
 `revert calibrate-controller` once — it detects this prefix's gamepad and binds it. (The
 one-command install runs this for you.)
 
+**Naming a skater without a keyboard?** THUG2's PC text-entry screens (create-a-skater
+name, save-game names, arcade high-score initials) are keyboard-only — a problem on a
+Steam Deck. Revert adds **controller text entry** that turns on automatically when a text
+field is open: the **D-pad or left stick** cycles the letter, **A** commits it, **X**
+backspaces, and **Start** saves. (On a keyboard the same maps to **F5**/**F6** cycle,
+**F7** commit, **F8** backspace, **F10** done.)
+
 **Prefer clicking to typing?** Run `revert gui` for a small local web UI that runs the
 same lifecycle (doctor/setup/build/run/update) with a live output console. `revert setup`
 also installs an app-menu launcher ("THUG2: Violet Vandal Edition") — or add one anytime
