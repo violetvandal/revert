@@ -40,6 +40,69 @@ ask()  { local a; printf '%s?%s %s ' "$p" "$o" "$1" >"$TTY"; read -r a <"$TTY" |
 is_deck() { [[ "${SteamDeck:-0}" == "1" ]] || grep -qiE 'jupiter|galileo' \
   /sys/devices/virtual/dmi/id/product_name 2>/dev/null; }
 
+# has_password — authoritative check: does the current account have a usable password?
+# `passwd -S` field 2 is P (usable) / NP (none) / L (locked). Reading the real state
+# beats trusting an exit code from whatever tool we used to set it.
+has_password() { [[ "$(passwd -S 2>/dev/null | awk 'NR==1{print $2}')" == "P" ]]; }
+
+# set_password_noninteractive <pw> — set the CURRENT user's password without a keyboard.
+# `passwd` reads its controlling terminal (getpass), not a pipe, so we drive it through a
+# PTY. A fresh SteamOS 'deck' account has no password and `passwd` asks only for the new
+# one twice (the documented Deck flow). We try util-linux `script`, then a real Python
+# PTY, and judge success by has_password — NOT by the driver's exit code (script -e can
+# report nonzero even when the change took). Captures passwd's message for diagnostics.
+VV_PASSWD_MSG=""
+set_password_noninteractive() {
+  local pw="$1" log; log="$(mktemp)"
+  # Attempt 1: util-linux `script` provides the PTY; feed the new password twice.
+  if command -v script >/dev/null; then
+    printf '%s\n%s\n' "$pw" "$pw" | script -qec passwd /dev/null >"$log" 2>&1 || true
+    has_password && { rm -f "$log"; return 0; }
+  fi
+  # Attempt 2: a real PTY via Python (present on SteamOS); react to each prompt.
+  if command -v python3 >/dev/null; then
+    REVERT_PW="$pw" python3 - >>"$log" 2>&1 <<'PY' || true
+import os, pty, time, select, sys
+pw = (os.environ["REVERT_PW"] + "\n").encode()
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp("passwd", ["passwd"])
+writes, buf, end = 0, b"", time.time() + 20
+while time.time() < end:
+    try:
+        r, _, _ = select.select([fd], [], [], 0.5)
+    except OSError:
+        break
+    if r:
+        try:
+            d = os.read(fd, 4096)
+        except OSError:
+            break
+        if not d:
+            break
+        buf += d
+    # Answer each "…:" prompt (New / Retype) with the password, at most twice.
+    if writes < 2 and buf.rstrip().endswith(b":"):
+        try:
+            os.write(fd, pw)
+        except OSError:
+            break
+        writes += 1
+        buf = b""
+try:
+    os.waitpid(pid, 0)
+except OSError:
+    pass
+PY
+    has_password && { rm -f "$log"; return 0; }
+  fi
+  # Failed — surface passwd's real message (echo is off, so no password leaks into it).
+  VV_PASSWD_MSG="$(grep -aiE 'bad|error|fail|token|short|simple|dictionary|palindrome|no tty|not found|denied' "$log" \
+    | grep -aviE 'new password|retype|current password' | sort -u | head -5)"
+  rm -f "$log"
+  return 1
+}
+
 printf '%s\n' "${p}"
 cat <<'BANNER'
   ┌──────────────────────────────────────────────────┐
@@ -77,13 +140,13 @@ if [[ "$pwstat" == "NP" || "$pwstat" == "L" ]]; then
   if [[ "$DRIVEN" == 1 ]]; then
     [[ -n "${REVERT_PASSWORD:-}" ]] || die "no password provided (setup needs one to install a few system libraries)."
     info "Setting your account password (needed for the one system step)."
-    # passwd reads from a controlling terminal, not a pipe — hand it a PTY via util-linux
-    # `script` and feed the new password twice. A fresh 'NP' account isn't asked for a
-    # current password, so two lines suffice.
-    if printf '%s\n%s\n' "$REVERT_PASSWORD" "$REVERT_PASSWORD" | script -qec passwd /dev/null >/dev/null 2>&1; then
+    if set_password_noninteractive "$REVERT_PASSWORD"; then
       ok "password set"
     else
-      die "couldn't set your password automatically. Open Konsole and run 'passwd' once, then re-run the installer."
+      [[ -n "$VV_PASSWD_MSG" ]] && { warn "the system rejected it:"; printf '%s\n' "$VV_PASSWD_MSG" | sed 's/^/      /'; }
+      die "couldn't set your account password automatically.$([[ -n "$VV_PASSWD_MSG" ]] && echo ' See the reason above.') \
+Most often the password is too short/simple — pick a longer one (8+ chars, not all digits) and press Install again. \
+Or set it yourself: open Konsole, run 'passwd' (use the SAME password you typed here), then press Install again."
     fi
   else
     warn "You don't have a password set yet — the setup step needs one (it installs a"
