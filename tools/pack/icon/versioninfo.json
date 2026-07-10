@@ -1,0 +1,28 @@
+{
+	"FixedFileInfo": {
+		"FileVersion":    { "Major": 0, "Minor": 0, "Patch": 0, "Build": 0 },
+		"ProductVersion": { "Major": 0, "Minor": 0, "Patch": 0, "Build": 0 },
+		"FileFlagsMask": "3f",
+		"FileFlags ": "00",
+		"FileOS": "040004",
+		"FileType": "01",
+		"FileSubType": "00"
+	},
+	"StringFileInfo": {
+		"Comments": "Ships tooling, never game data. https://github.com/violetvandal/revert",
+		"CompanyName": "Violet Vandal",
+		"FileDescription": "Revert",
+		"FileVersion": "dev",
+		"InternalName": "revert",
+		"LegalCopyright": "Copyright (c) Violet Vandal. MIT licensed.",
+		"LegalTrademarks": "",
+		"OriginalFilename": "revert.exe",
+		"PrivateBuild": "",
+		"ProductName": "THUG2: Violet Vandal Edition",
+		"ProductVersion": "dev",
+		"SpecialBuild": ""
+	},
+	"VarFileInfo": {
+		"Translation": { "LangID": "0409", "CharsetID": "04B0" }
+	}
+}

@@ -84,6 +84,20 @@
   .badge.run { color:var(--warn); border-color:rgba(245,197,24,.4); }
   .badge.ok  { color:var(--ok);  border-color:rgba(87,211,140,.4); }
   .badge.bad { color:var(--blood); border-color:rgba(232,59,92,.4); }
+  /* Windows first-run wizard: a linear step tracker above one big action button. */
+  .wsteps { display:flex; gap:6px; margin:14px 0 6px; }
+  .wstep { flex:1; text-align:center; font-size:11px; padding:7px 4px; border:1px solid var(--line);
+    border-radius:9px; color:var(--ash); background:rgba(23,16,42,.4); transition:.15s; }
+  .wstep .ic { display:block; font-size:15px; line-height:1.3; opacity:.55; }
+  .wstep.active { border-color:var(--grape); color:var(--bone); background:rgba(162,75,255,.16); }
+  .wstep.active .ic { opacity:1; }
+  .wstep.done { border-color:rgba(87,211,140,.45); color:var(--ok); }
+  .wstep.done .ic, .wstep.failed .ic { opacity:1; }
+  .wstep.failed { border-color:rgba(232,59,92,.5); color:var(--blood); }
+  #winPlay { padding:11px 10px; font-size:14px; }
+  .linkish { background:none; border:none; color:var(--grape-soft); cursor:pointer; font-size:11.5px;
+    padding:0; margin-top:10px; text-decoration:underline; }
+  .linkish:hover { color:var(--bone); }
 </style>
 </head>
 <body>
@@ -157,6 +171,54 @@
     </section>
   </section>
 
+  <!-- ── Windows first-run wizard (no sudo/clone: the bundle is already the install) ── -->
+  <section class="wizard" id="winwizard" hidden>
+    <div class="card wizcard">
+      <div id="winForm">
+        <h3>Set up your edition</h3>
+        <p>Point Revert at the THUG2 you already own, then press one button. It installs the prerequisites, prepares your game files, and builds the modded edition. No terminal.</p>
+
+        <label class="fld">Your THUG2 copy
+          <div class="controls">
+            <input type="text" id="winPath" placeholder="C:\path\to\your\THUG2 folder" />
+            <button class="browse" id="winBrowse" type="button">Browse…</button>
+          </div>
+          <div class="controls">
+            <input type="text" id="winUrl" placeholder="…or paste a link to a .zip / .7z / .iso" />
+          </div>
+        </label>
+        <div class="hint">Revert ships no game data; bring your own copy. A link is fetched as-is (like curl); you're responsible for the right to those files.</div>
+
+        <div class="wsteps" id="winSteps">
+          <div class="wstep" data-step="setup"><span class="ic">①</span>Setup</div>
+          <div class="wstep" data-step="acquire"><span class="ic">②</span>Game files</div>
+          <div class="wstep" data-step="build"><span class="ic">③</span>Build</div>
+        </div>
+
+        <button class="act" id="winInstall">Install</button>
+        <div class="lock" id="winErr" hidden></div>
+      </div><!-- /#winForm -->
+
+      <div id="winDone" hidden>
+        <p class="doneMsg">✓ <b>All set. Your edition is installed and built.</b></p>
+        <button class="act" id="winPlay">▶ Play THUG2</button>
+        <div class="hint">Launches the QOL-modded lane in widescreen. Plug in an Xbox-style pad for the full experience.</div>
+        <button class="linkish" id="winManage">Open the full control panel (lanes, update, re-run steps) →</button>
+      </div>
+    </div>
+
+    <section class="console">
+      <div class="bar">
+        <span class="run" id="winRunning">idle</span>
+        <span class="spacer"></span>
+        <span class="badge" id="winBadge" style="display:none"></span>
+      </div>
+      <div class="progress" id="winProgress"><div class="pfill"></div></div>
+      <pre id="winLog"><span class="cmd">Add your THUG2 folder above, then press Install. Progress streams here; the build takes a few minutes.</span>
+</pre>
+    </section>
+  </section>
+
   <!-- ── Management view (shown once the toolkit is installed) ── -->
   <main id="manage" hidden>
     <section class="steps" id="steps">
@@ -165,7 +227,7 @@
         <button class="act" data-cmd="doctor">Run doctor</button>
       </div>
       <div class="card" id="card-setup">
-        <h3>2 · Setup</h3><p>Install Wine/DXVK/controller + prefixes.</p>
+        <h3>2 · Setup</h3><p id="setupDesc">Install Wine/DXVK/controller + prefixes.</p>
         <button class="act" data-cmd="setup">Run setup</button>
       </div>
       <div class="card" id="card-data">
@@ -196,7 +258,10 @@
       </div>
       <div class="card" id="card-update">
         <h3>⟳ · Update</h3><p>Update to the latest release + rebuild.</p>
+        <div class="hint" id="verLine" hidden></div>
         <button class="act" data-cmd="update" data-args="check">Check for updates</button>
+        <button class="act" data-cmd="update" data-args="">Install update</button>
+        <div class="hint">Installing replaces the toolkit binaries, then rebuilds. Your game data and saves are untouched. Restart this window afterwards.</div>
       </div>
     </section>
 
@@ -293,8 +358,10 @@ function applyGating() {
     const lock = c.querySelector('.lock');
     if (lock) { lock.hidden = enabled; if (!enabled && hint) lock.textContent = hint; }
   };
+  // These cards are always available; they only grey out while a command is running.
+  // (querySelectorAll, not querySelector — the update card has two buttons.)
   ['card-doctor', 'card-update'].forEach(id => {
-    const btn = card(id).querySelector('button.act[data-cmd]'); if (btn) btn.disabled = busy;
+    card(id).querySelectorAll('button.act[data-cmd]').forEach(btn => { btn.disabled = busy; });
   });
   gate('card-setup', state.wine && state.setup, true);
   gate('card-data', state.pristine, true);
@@ -304,7 +371,12 @@ function applyGating() {
 }
 
 function refreshStatus() {
-  return fetch('/api/status').then(r => r.json()).then(s => { state = s || {}; applyGating(); }).catch(() => {});
+  // Always re-gate afterwards (even if the status fetch fails), so buttons never get
+  // stuck disabled. Callers clear `busy` BEFORE calling this so applyGating re-enables.
+  return fetch('/api/status').then(r => r.json())
+    .then(s => { state = s || {}; })
+    .catch(() => {})
+    .finally(() => applyGating());
 }
 
 function argsFor(btn) {
@@ -328,7 +400,8 @@ function runCmd(cmd, args) {
   const qs = new URLSearchParams(); qs.set('cmd', cmd);
   args.forEach(a => qs.append('arg', a));
   stream('/api/stream?' + qs.toString(), () => {
-    refreshStatus().finally(() => setBusy(false));
+    setBusy(false);   // clear busy FIRST, then re-gate so buttons re-enable
+    refreshStatus();
   });
 }
 
@@ -344,6 +417,7 @@ function wireManage() {
 
 function showManage() {
   document.getElementById('wizard').hidden = true;
+  document.getElementById('winwizard').hidden = true;
   document.getElementById('manage').hidden = false;
   document.getElementById('rootLabel').textContent = 'toolkit root:';
   useManage();
@@ -492,12 +566,157 @@ function pickInto(targetId, btnId) {
   }).catch(() => {}).finally(() => { b.disabled = false; b.textContent = 'Browse…'; });
 }
 
+// ── Windows first-run wizard ────────────────────────────────────────────────
+// A guided, linear flow for Windows. Unlike the Deck wizard it has no sudo password,
+// no install location, and no Gaming-Mode screen — the bundle is already the install.
+// It just chains the SAME proven commands the control panel runs (setup → acquire →
+// build), so there is no new backend, then offers Play.
+function useWinWizard() {
+  activeLog = document.getElementById('winLog');
+  activeProgress = document.getElementById('winProgress');
+  activeRunning = document.getElementById('winRunning');
+  activeBadge = document.getElementById('winBadge');
+}
+
+function winSrc() {
+  const u = document.getElementById('winUrl').value.trim();
+  const p = document.getElementById('winPath').value.trim();
+  if (u) return ['--url', u];
+  if (p) return ['--folder', p];
+  return null;
+}
+
+function validateWin() {
+  document.getElementById('winInstall').disabled = busy || !winSrc();
+}
+
+function setWinStep(key, cls) {
+  const el = document.querySelector('#winSteps .wstep[data-step="' + key + '"]');
+  if (!el) return;
+  el.classList.remove('active', 'done', 'failed');
+  const ic = el.querySelector('.ic');
+  const glyph = { setup: '①', acquire: '②', build: '③' }[key];
+  if (cls) el.classList.add(cls);
+  ic.textContent = cls === 'done' ? '✓' : cls === 'failed' ? '✕' : glyph;
+}
+
+// Each entry maps to an existing /api/stream command; run in order, advance on exit 0.
+const WIN_SEQ = [
+  { key: 'setup',   cmd: 'setup',             args: () => [] },
+  { key: 'acquire', cmd: 'acquire-game-data', args: () => winSrc() || [] },
+  { key: 'build',   cmd: 'build',             args: () => [] },
+];
+
+function runWinStep(i) {
+  if (i >= WIN_SEQ.length) { winInstallDone(); return; }
+  const step = WIN_SEQ[i];
+  if (activeBadge) activeBadge.style.display = 'none';
+  setWinStep(step.key, 'active');
+  const qs = new URLSearchParams(); qs.set('cmd', step.cmd);
+  step.args().forEach(a => qs.append('arg', a));
+  stream('/api/stream?' + qs.toString(), code => {
+    if (code === '0') { setWinStep(step.key, 'done'); runWinStep(i + 1); }
+    else { setWinStep(step.key, 'failed'); winInstallFailed(step, code); }
+  });
+}
+
+function winFieldsDisabled(d) {
+  ['winPath', 'winUrl', 'winBrowse', 'winInstall'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.disabled = d;
+  });
+}
+
+function startWinInstall() {
+  if (!winSrc()) { winError('Add your THUG2 copy: a folder or a download link.'); return; }
+  document.getElementById('winErr').hidden = true;
+  ['setup', 'acquire', 'build'].forEach(k => setWinStep(k, '')); // reset (resume after a failure)
+  setBusy(true);
+  winFieldsDisabled(true);
+  runWinStep(0);
+}
+
+function winInstallDone() {
+  setBusy(false);
+  document.getElementById('winForm').hidden = true;
+  document.getElementById('winDone').hidden = false;
+  fetch('/api/info').then(r => r.json()).then(info => {
+    document.getElementById('rootDot').className = 'dot ' + (info.revertFound ? 'ok' : 'bad');
+    if (info.root) document.getElementById('rootPath').textContent = info.root;
+  }).catch(() => {});
+}
+
+function winInstallFailed(step, code) {
+  setBusy(false);
+  winFieldsDisabled(false);
+  // Steps are idempotent, so pressing Install again resumes from the failed one.
+  winError('“' + step.cmd + '” failed (exit ' + code + '). Check the log, then press Install to try again.');
+}
+
+function winError(msg) {
+  const e = document.getElementById('winErr'); e.hidden = false; e.textContent = msg;
+}
+
+function wireWinWizard() {
+  document.getElementById('winBrowse').addEventListener('click', () => pickInto('winPath', 'winBrowse'));
+  document.getElementById('winInstall').addEventListener('click', startWinInstall);
+  ['winPath', 'winUrl'].forEach(id =>
+    document.getElementById(id).addEventListener('input', validateWin));
+  document.getElementById('winPlay').addEventListener('click', () => {
+    if (busy) return;
+    setBusy(true);
+    if (activeBadge) activeBadge.style.display = 'none';
+    const qs = new URLSearchParams(); qs.set('cmd', 'run'); qs.append('arg', 'qol');
+    stream('/api/stream?' + qs.toString(), () => setBusy(false));
+  });
+  document.getElementById('winManage').addEventListener('click', showManage);
+}
+
+function showWinWizard(info) {
+  document.getElementById('manage').hidden = true;
+  document.getElementById('wizard').hidden = true;
+  document.getElementById('winwizard').hidden = false;
+  document.getElementById('rootLabel').textContent = 'toolkit:';
+  document.getElementById('rootPath').textContent = info.root || info.defaultDir || '…';
+  useWinWizard();
+  validateWin();
+}
+
+// ── heartbeat ───────────────────────────────────────────────────────────────
+// While this page is open, tell the local server so it stays up. When the tab closes the
+// beats stop and (on Windows) the server exits, closing its console window. The pagehide
+// beacon makes that near-instant instead of waiting out the timeout.
+fetch('/api/heartbeat').catch(() => {});
+setInterval(() => { fetch('/api/heartbeat').catch(() => {}); }, 2000);
+window.addEventListener('pagehide', () => {
+  try { navigator.sendBeacon('/api/heartbeat?bye=1'); } catch (e) {}
+});
+
 // ── boot ──────────────────────────────────────────────────────────────────────
 wireManage();
 wireWizard();
+wireWinWizard();
 fetch('/api/info').then(r => r.json()).then(info => {
   document.getElementById('rootPath').textContent = info.root || info.defaultDir || '…';
   document.getElementById('rootDot').className = 'dot ' + (info.revertFound ? 'ok' : 'bad');
+  if (info.version) {
+    const v = document.getElementById('verLine');
+    v.textContent = info.version === 'dev'
+      ? 'Running an unstamped dev build; self-update is disabled.'
+      : 'Currently installed: ' + info.version;
+    v.hidden = false;
+  }
+  // On native Windows there's no Wine — retitle the setup step and use a Windows-style
+  // path hint so the panel doesn't describe a Linux flow.
+  if (info.os === 'windows') {
+    document.getElementById('setupDesc').textContent = 'Install prerequisites (DirectX 9, controller bindings).';
+    document.getElementById('gamePath').placeholder = 'C:\\path\\to\\your\\THUG2 folder';
+    // First run (no edition built yet) → the guided wizard; otherwise the control panel.
+    // The Deck/Linux install wizard (bash install.sh + sudo) never applies here.
+    fetch('/api/status').then(r => r.json())
+      .then(s => { (s && s.build) ? showManage() : showWinWizard(info); })
+      .catch(() => showManage());
+    return;
+  }
   if (info.revertFound) showManage(); else showWizard(info);
 }).catch(() => { useManage(); showManage(); });
 </script>

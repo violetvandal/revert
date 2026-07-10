@@ -18,7 +18,8 @@
 #            (audio rarely changes; the day-to-day loop is just apply-mods --only <mod>)
 #
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Superseded by `revert build`; kept for reference. Lives in share/legacy/, so ROOT is two dirs up.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PRISTINE="$ROOT/game-pristine-us"
 DEST="$ROOT/game-playable-us"
 RUNTIME_EXE="$ROOT/game-modded-vanilla/THUG2.exe"          # no-CD exe source
@@ -145,7 +146,7 @@ if (( FAST )); then
   install_glyphfix "$DEST"
   log "      controller text entry (name/initials screens)"
   install_keyboardgrid "$DEST"
-  log "Done (--fast). Play: $ROOT/run-playable-ge.sh"
+  log "Done (--fast). Play: ./revert run qol"
   exit 0
 fi
 
@@ -180,4 +181,4 @@ else
   log "5/5  HQ audio pack not found ($HQ_AUDIO_PACK) — skipping"
 fi
 
-log "Done. Play: $ROOT/run-playable-ge.sh"
+log "Done. Play: ./revert run qol"

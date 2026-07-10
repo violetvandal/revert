@@ -1,0 +1,156 @@
+# Catch Microsoft Defender false positives on the Windows binaries before users do.
+#
+# Every detection this project has ever had came from one of two self-inflicted causes:
+# stripping the Go binaries (a stripped Go exe trips the `Wacatac` ML heuristic), and
+# spawning a LOLBin (`rundll32 url.dll,FileProtocolHandler` to open a browser, which reads
+# as DefenseEvasion at runtime). Both are cheap to reintroduce, so `guards` checks for them
+# statically, and `defender-scan` runs the real thing against the real scanner.
+#
+# Note what this does NOT cover: a static scan cannot see a *behavioral* detection, and it
+# has nothing to say about the SmartScreen "unknown publisher" prompt, which is a
+# reputation signal rather than a detection and clears only with signing plus download
+# volume. See docs in the release notes.
+name: windows-defender-scan
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guards:
+    name: regression guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A stripped Go binary looks packed to Defender's ML model. Match assignments, not the
+      # comment that explains the rule.
+      - name: the Windows packer must not strip
+        run: |
+          if grep -nE '^[[:space:]]*(LDFLAGS|REVERT_LDFLAGS)=.*-[sw]([[:space:]]|$|'"'"'|")' \
+               tools/pack/build-windows-bundle.sh; then
+            echo "::error file=tools/pack/build-windows-bundle.sh::stripping (-s/-w) reintroduced; a stripped Go binary trips Defender's Wacatac heuristic"
+            exit 1
+          fi
+          echo "ok: no strip flags"
+
+      # Match string literals only. The source legitimately *mentions* rundll32 in comments
+      # explaining why we don't call it.
+      - name: no LOLBin process spawns
+        run: |
+          if grep -rnE '"(rundll32|mshta|regsvr32|certutil|wmic)(\.exe)?"' \
+               --include='*.go' cmd/ internal/ gui/; then
+            echo "::error::a LOLBin is invoked as a subprocess; use the Win32 API directly (e.g. ShellExecuteW for URLs)"
+            exit 1
+          fi
+          echo "ok: no LOLBin spawns"
+
+  build:
+    name: cross-compile windows/amd64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - run: go test ./...
+
+      # Deliberately unstripped. -trimpath keeps the build reproducible.
+      - name: build the binaries Defender will see
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p out
+          go build -trimpath -o out/revert.exe ./cmd/revert
+          go build -trimpath -o out/vv-padbridge.exe ./cmd/vv-padbridge
+          (cd gui && go build -trimpath -o ../out/revert-gui.exe .)
+          (cd tools/thugkit && go build -trimpath -o ../../out/thugkit.exe ./cmd/thugkit)
+
+      # The prebuilt mingw artifacts ship in the bundle too, so scan them as well.
+      - name: stage the shipped native mods
+        run: |
+          for f in tools/hudfix/VV.HudFix.asi \
+                   tools/glyphfix/VV.GlyphFix.asi \
+                   tools/keyboardgrid/VV.KeyboardGrid.asi \
+                   tools/xinput-probe/dinput_probe_guid.exe; do
+            [ -f "$f" ] && cp "$f" out/ || echo "note: $f absent, skipping"
+          done
+          ls -l out/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-binaries
+          path: out/
+          retention-days: 5
+
+  defender-scan:
+    name: scan with Microsoft Defender
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-binaries
+          path: out
+
+      - name: update Defender definitions
+        shell: pwsh
+        run: |
+          $mp = 'C:\Program Files\Windows Defender\MpCmdRun.exe'
+          if (-not (Test-Path $mp)) { throw "MpCmdRun.exe not found; the runner image changed" }
+          & $mp -SignatureUpdate
+          # A signature update failure must not silently degrade the scan to "old definitions".
+          if ($LASTEXITCODE -ne 0) { Write-Host "::warning::signature update returned $LASTEXITCODE" }
+          Get-MpComputerStatus | Select-Object AntivirusSignatureVersion,AMEngineVersion | Format-List
+
+      - name: scan every shipped binary
+        shell: pwsh
+        run: |
+          $mp = 'C:\Program Files\Windows Defender\MpCmdRun.exe'
+          $failed = @()
+          Get-ChildItem out -File | ForEach-Object {
+            $out = & $mp -Scan -ScanType 3 -File $_.FullName 2>&1 | Out-String
+            $code = $LASTEXITCODE
+            # MpCmdRun exits 0 and prints "found no threats" when clean. Check both: a future
+            # image could change the text, and a nonzero exit is meaningful on its own.
+            if ($code -ne 0 -or $out -notmatch 'found no threats') {
+              $failed += $_.Name
+              Write-Host "::error file=$($_.Name)::Defender flagged $($_.Name) (exit $code)"
+              Write-Host $out
+            } else {
+              Write-Host "ok: $($_.Name)"
+            }
+          }
+          if ($failed.Count -gt 0) {
+            Write-Host "::error::Defender flagged: $($failed -join ', ')"
+            Write-Host "If this is a false positive, submit at https://www.microsoft.com/wdsi/filesubmission"
+            Write-Host "as 'Software developer' -> false positive, using the persona Microsoft account."
+            exit 1
+          }
+          Write-Host "All binaries clean."
+
+      # A static scan cannot see behavioral detections, so surface anything the scanner
+      # recorded during this run rather than trusting the per-file exit codes alone.
+      - name: report any recorded detections
+        if: always()
+        shell: pwsh
+        run: |
+          $d = Get-MpThreatDetection -ErrorAction SilentlyContinue
+          if ($d) {
+            Write-Host "::warning::Defender recorded threat detections on this runner:"
+            $d | Select-Object -Last 10 | Format-List InitialDetectionTime,ThreatID,Resources
+          } else {
+            Write-Host "No threat detections recorded."
+          }

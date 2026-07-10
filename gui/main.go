@@ -30,6 +30,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 //go:embed web
@@ -51,12 +53,21 @@ var (
 	installedDir string
 )
 
+// revertBinName is the dispatcher binary's name: the native Go `revert.exe` on Windows
+// (there's no bash there to run the shebang script), the bash `revert` elsewhere.
+func revertBinName() string {
+	if runtime.GOOS == "windows" {
+		return "revert.exe"
+	}
+	return "revert"
+}
+
 // revertAt reports whether dir holds an executable `revert` dispatcher.
 func revertAt(dir string) bool {
 	if dir == "" {
 		return false
 	}
-	fi, err := os.Stat(filepath.Join(dir, "revert"))
+	fi, err := os.Stat(filepath.Join(dir, revertBinName()))
 	return err == nil && !fi.IsDir()
 }
 
@@ -121,15 +132,22 @@ func newCmd(why, name string, args ...string) *exec.Cmd {
 	return exec.Command(name, args...)
 }
 
-// guiEnv augments the process env with the local Go + bin dirs a fresh install drops,
-// so `revert build` (which needs the Go toolchain) works from the GUI post-install.
+// guiEnv augments the process env with the local Go + bin dirs a fresh Linux install
+// drops, so `revert build` (which needs the Go toolchain) works from the GUI
+// post-install. On Windows the bundle ships prebuilt binaries and needs no Go toolchain,
+// so the process env is used as-is (and the ':' PATH separator would corrupt a Windows
+// PATH anyway).
 func guiEnv() []string {
 	env := os.Environ()
+	if runtime.GOOS == "windows" {
+		return env
+	}
 	if home, err := os.UserHomeDir(); err == nil {
-		extra := filepath.Join(home, ".local", "go", "bin") + ":" + filepath.Join(home, ".local", "bin")
+		sep := string(os.PathListSeparator)
+		extra := filepath.Join(home, ".local", "go", "bin") + sep + filepath.Join(home, ".local", "bin")
 		for i, e := range env {
 			if strings.HasPrefix(e, "PATH=") {
-				env[i] = "PATH=" + strings.TrimPrefix(e, "PATH=") + ":" + extra
+				env[i] = "PATH=" + strings.TrimPrefix(e, "PATH=") + sep + extra
 				return env
 			}
 		}
@@ -154,6 +172,7 @@ func main() {
 	mux.HandleFunc("/api/stream", streamHandler)
 	mux.HandleFunc("/api/install/start", installStartHandler)
 	mux.HandleFunc("/api/install/stream", installStreamHandler)
+	mux.HandleFunc("/api/heartbeat", heartbeatHandler)
 
 	// Bind to loopback on a free port (local, single-user; never exposed).
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -166,10 +185,57 @@ func main() {
 	if effectiveRoot() == "" {
 		mode = "installer (no toolkit found yet)"
 	}
-	fmt.Printf("Revert GUI running at %s\n  mode: %s\n(Ctrl-C to quit)\n", url, mode)
+	fmt.Printf("Revert GUI running at %s\n  mode: %s\n", url, mode)
+	// On Windows the GUI is launched by double-clicking revert-gui.exe, which leaves a
+	// console window sitting behind the browser. Exit when the browser tab closes so that
+	// window closes too. On Linux/Deck the GUI is launched from a terminal or a .desktop
+	// whose lifecycle the user manages, so keep the Ctrl-C behavior there, untouched.
+	if runtime.GOOS == "windows" {
+		fmt.Println("(closes automatically when you close the browser tab)")
+		go watchBrowser()
+	} else {
+		fmt.Println("(Ctrl-C to quit)")
+	}
 	openBrowser(url)
 	if err := http.Serve(ln, mux); err != nil {
 		fmt.Fprintln(os.Stderr, "serve:", err)
+	}
+}
+
+// Browser-presence tracking. The page heartbeats while it is open; when the beats stop
+// (tab closed) and nothing is mid-run, the process exits so its console window closes.
+var (
+	lastBeat   atomic.Int64 // UnixNano of the last heartbeat; 0 means "browser said goodbye"
+	sawBrowser atomic.Bool  // set once the page has connected at least once
+	activeCmds atomic.Int32 // >0 while a command is streaming (a build/install in flight)
+)
+
+func heartbeatHandler(w http.ResponseWriter, r *http.Request) {
+	sawBrowser.Store(true)
+	if r.URL.Query().Get("bye") == "1" {
+		lastBeat.Store(0) // pagehide beacon: the tab is closing, exit as soon as we're idle
+	} else {
+		lastBeat.Store(time.Now().UnixNano())
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// watchBrowser exits the process a few seconds after the browser tab goes away. It never
+// interrupts work: a running command (build/install) holds activeCmds > 0, and the child
+// process keeps streaming to completion even with no browser attached (streamCmd reads its
+// stdout regardless), so we wait until it finishes before exiting. The grace window rides
+// out a page reload, which resumes heartbeats within ~2s.
+func watchBrowser() {
+	const grace = 6 * time.Second
+	for range time.Tick(2 * time.Second) {
+		if !sawBrowser.Load() || activeCmds.Load() > 0 {
+			continue
+		}
+		beat := lastBeat.Load()
+		if beat == 0 || time.Since(time.Unix(0, beat)) > grace {
+			fmt.Println("Browser closed — shutting down.")
+			os.Exit(0)
+		}
 	}
 }
 
@@ -184,7 +250,23 @@ func infoHandler(w http.ResponseWriter, r *http.Request) {
 		"defaultDir":  defaultInstallDir(),
 		"isSteamDeck": isSteamDeck(),
 		"desktopMode": isDesktopMode(),
+		"os":          runtime.GOOS, // "windows" -> the UI hides the sudo-password field
+		"version":     revertVersion(root),
 	})
+}
+
+// revertVersion asks the installed CLI which release it was built from ("dev" for an
+// unstamped build). Empty when the toolkit isn't installed yet or the binary is too old to
+// know its own version.
+func revertVersion(root string) string {
+	if root == "" {
+		return ""
+	}
+	out, err := exec.Command(filepath.Join(root, revertBinName()), "version").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // isDesktopMode reports a Steam Deck currently in Desktop Mode (KDE) rather than Gaming
@@ -206,7 +288,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "{}")
 		return
 	}
-	c := exec.Command(filepath.Join(root, "revert"), "status", "--json")
+	c := exec.Command(filepath.Join(root, revertBinName()), "status", "--json")
 	c.Dir = root
 	c.Env = append(guiEnv(), "REVERT_ROOT="+root, "TERM=dumb")
 	out, err := c.Output()
@@ -308,6 +390,14 @@ func installStreamHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	if runtime.GOOS == "windows" {
+		// The standalone bootstrap (bash install.sh + sudo/askpass) is Linux/Deck-only.
+		// On Windows the bundle already carries revert.exe, so the GUI runs as the
+		// management panel and drives setup/acquire/build directly — no wizard needed.
+		sse(w, flusher, "error", "On Windows, extract the bundle and use the management panel (Setup → Acquire → Build → Play). The bootstrap wizard is Linux/Steam Deck only.")
+		sse(w, flusher, "done", "1")
+		return
+	}
 	if !ok {
 		sse(w, flusher, "error", "install session expired — reload and try again")
 		sse(w, flusher, "done", "1")
@@ -445,6 +535,8 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
+	activeCmds.Add(1) // hold off the browser-close watchdog while this command runs
+	defer activeCmds.Add(-1)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -461,7 +553,7 @@ func streamHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Wrap in systemd-inhibit too: `build` is long and `run` should hold off suspend
 	// while the game is up.
-	c := newCmd("Revert: "+cmd, filepath.Join(root, "revert"), args...)
+	c := newCmd("Revert: "+cmd, filepath.Join(root, revertBinName()), args...)
 	c.Dir = root
 	c.Env = append(guiEnv(), "REVERT_ROOT="+root, "TERM=dumb")
 	sse(w, flusher, "done", streamCmd(w, flusher, c))
@@ -499,7 +591,60 @@ func sse(w io.Writer, flusher http.Flusher, event, data string) {
 	flusher.Flush()
 }
 
-// ── native folder picker (unchanged) ──────────────────────────────────────────
+// ── native folder picker ──────────────────────────────────────────────────────
+
+// winFolderPickerPS drives a Windows folder dialog from this helper process. The catch:
+// the GUI runs in the *browser*, so revert-gui.exe is never the foreground process, and
+// Windows blocks a background process from pulling its dialog to the front. The dialog
+// then opens behind the browser and the button hangs waiting on a dialog nobody can see.
+//
+// Two things beat that. A real, opaque, off-screen TopMost owner form (the old code used
+// an Opacity=0 owner — an invisible layered window that did not reliably pass its z-order
+// to the child dialog). And the AttachThreadInput trick: temporarily attach our input
+// queue to the current foreground thread so SetForegroundWindow is allowed to move focus
+// to our owner, which the modal dialog then inherits.
+const winFolderPickerPS = `
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -Namespace VV -Name Native -MemberDefinition @'
+[DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr pid);
+[DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+[DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a, uint b, bool attach);
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+'@
+$owner = New-Object System.Windows.Forms.Form
+$owner.TopMost = $true
+$owner.ShowInTaskbar = $false
+$owner.FormBorderStyle = 'None'
+$owner.StartPosition = 'Manual'
+$owner.Left = -3000; $owner.Top = -3000; $owner.Width = 1; $owner.Height = 1
+$owner.Show()
+$fg = [VV.Native]::GetForegroundWindow()
+$ft = [VV.Native]::GetWindowThreadProcessId($fg, [IntPtr]::Zero)
+$mt = [VV.Native]::GetCurrentThreadId()
+[void][VV.Native]::AttachThreadInput($mt, $ft, $true)
+[void][VV.Native]::SetForegroundWindow($owner.Handle)
+$owner.Activate()
+[void][VV.Native]::AttachThreadInput($mt, $ft, $false)
+$d = New-Object System.Windows.Forms.FolderBrowserDialog
+$d.Description = 'Select your THUG2 folder'
+$d.ShowNewFolderButton = $false
+$r = $d.ShowDialog($owner)
+$owner.Close()
+if ($r -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($d.SelectedPath) }
+`
+
+// firstLine returns the first non-empty line of s (PowerShell error text is multi-line;
+// the first line is the useful one for a toast).
+func firstLine(s string) string {
+	for _, ln := range strings.Split(s, "\n") {
+		if t := strings.TrimSpace(ln); t != "" {
+			return t
+		}
+	}
+	return strings.TrimSpace(s)
+}
 
 func pickHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -519,11 +664,7 @@ func pickFolder() (string, error) {
 		c = exec.Command("osascript", "-e",
 			`POSIX path of (choose folder with prompt "Select your THUG2 folder")`)
 	case "windows":
-		ps := `Add-Type -AssemblyName System.Windows.Forms;` +
-			`$d = New-Object System.Windows.Forms.FolderBrowserDialog;` +
-			`$d.Description = 'Select your THUG2 folder';` +
-			`if ($d.ShowDialog() -eq 'OK') { [Console]::Out.Write($d.SelectedPath) }`
-		c = exec.Command("powershell", "-NoProfile", "-STA", "-Command", ps)
+		c = exec.Command("powershell", "-NoProfile", "-STA", "-Command", winFolderPickerPS)
 	default: // linux / *bsd
 		if p, _ := exec.LookPath("zenity"); p != "" {
 			c = exec.Command(p, "--file-selection", "--directory",
@@ -536,7 +677,16 @@ func pickFolder() (string, error) {
 	}
 	out, err := c.Output()
 	if err != nil {
-		return "", nil // treat cancel / non-zero as "no selection", not an error
+		// A cancelled dialog exits 0 with empty output, so a non-zero exit is a real
+		// failure (a picker exception, a missing tool). Surface its stderr instead of
+		// swallowing it as "no selection" — that silence is exactly what made a broken
+		// picker look like a dead button.
+		if ee, ok := err.(*exec.ExitError); ok {
+			if msg := strings.TrimSpace(string(ee.Stderr)); msg != "" {
+				return "", fmt.Errorf("folder picker: %s", firstLine(msg))
+			}
+		}
+		return "", nil
 	}
 	return strings.TrimSpace(string(out)), nil
 }
@@ -556,16 +706,7 @@ func stripANSI(s string) string {
 	return b.String()
 }
 
-func openBrowser(url string) {
-	var c *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		c = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	case "darwin":
-		c = exec.Command("open", url)
-	default:
-		c = exec.Command("xdg-open", url)
-	}
-	c.Stdout, c.Stderr = io.Discard, io.Discard
-	_ = c.Start()
-}
+// openBrowser opens url in the default browser. Implemented per-platform: on Windows via
+// the ShellExecute API directly (browser_windows.go) — NOT `rundll32 url.dll,...`, which
+// Windows Defender's behavior monitor flags as a defense-evasion / proxy-execution
+// technique and quarantines the (unsigned) exe. See browser_other.go for macOS/Linux.

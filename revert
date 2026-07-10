@@ -15,6 +15,7 @@
 #   revert tag <image> [...]               make an in-game Create-A-Graphic tag
 #   revert update [--check]                update to the latest release + rebuild
 #   revert status [--json]                 report lifecycle state (used by the GUI)
+#   revert version                         print the release this checkout is on
 #
 # Architecture (see docs/ARCHITECTURE.md): a Go "build" core (thugkit) owns producing
 # the edition; bash owns launch + system setup. This dispatcher routes to both.
@@ -310,8 +311,15 @@ cmd_build_installer() {
   note "Upload as a GitHub Release asset; the website /install button links to it."
 }
 
+# A Linux install is a git checkout, so the release it's on is whatever git says. (The
+# Windows lane has no git and reads a version stamped into revert.exe at build time.)
+cmd_version() {
+  git -C "$REVERT_ROOT" describe --tags --always 2>/dev/null || echo dev
+}
+
 case "${1:-help}" in
   doctor)            shift; cmd_doctor "$@";;
+  version|--version) shift; cmd_version "$@";;
   setup)             shift; cmd_setup "$@";;
   acquire-game-data) shift; cmd_acquire "$@";;
   acquire-hq)        shift; cmd_acquire_hq "$@";;

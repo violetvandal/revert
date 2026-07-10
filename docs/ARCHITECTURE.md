@@ -63,11 +63,36 @@ gitignored**: the pristine base, no-CD exe, WidescreenFix zip, HQ A/V pack, and 
 the persona `.GRF` tag, the HUD-fix, the controller `.reg`s + bridge, and the mod
 `.ns` sources.
 
+## The Windows lane (native — no Wine)
+On Windows THUG2 runs natively, so the whole Wine plane collapses. A **cross-platform Go
+front door** (root module `github.com/violetvandal/revert`) replaces bash there:
+
+```
+cmd/revert           revert.exe — mirrors the bash subcommand surface
+cmd/revert-gui       the same web UI (its own module), driving revert.exe
+cmd/vv-padbridge     XInput -> keystroke helper (the L2/R2 combos, native syscalls)
+internal/core        conf parser + doctor/status/build/run/setup/acquire/soundtrack
+```
+
+The single rule that keeps the proven Linux/Deck path safe: **on Linux every core
+command delegates to the bash dispatcher** (`internal/core/delegate.go`), so bash stays
+authoritative and can't diverge; **on Windows the commands run natively**. The seams are
+unchanged — `build` still shells to `thugkit`, `tag` still passes through, `run` just
+launches `THUG2.exe` directly (cd into the edition dir so the `winmm.dll` ASI loader +
+the `.asi`s resolve; `$VV_GLYPHS` set; the soundtrack swap ported to Go shelling to
+`thugkit prx`). Windows `setup` is minimal: the DirectX 9 runtime + a native `reg import`
+of the controller bindings (`tools/controls/thug2-settings.reg` — its
+`HKCU\Software\Activision\...` key path is already the real Windows path). The Python CAS
+extras stay optional and identical (probed on PATH). Package a release with
+`tools/pack/build-windows-bundle.sh` -> `dist/revert-windows-amd64.zip` (tooling only,
+never game data); see `README-WINDOWS.txt`.
+
 ## Deferred (not in v1)
-Fyne GUI front door; Windows / Steam-Deck packaging; porting the Python CAS steps and
-the licensed-asset injectors to Go; multi-distro setup beyond Fedora (doctor warns).
+Fyne GUI front door; Steam-Deck packaging; porting the Python CAS steps and the
+licensed-asset injectors to Go; multi-distro setup beyond Fedora (doctor warns).
 
 ## Legacy (superseded, kept for reference)
-`rebuild-playable.sh` (→ `revert build`) and the `run-*.sh` / `launch-*.sh` zoo
-(→ `revert run`). (`install.sh` is no longer legacy — it is now the one-command
-bootstrap that sets up prerequisites, clones, and runs the `revert` lifecycle.)
+The superseded scripts now live in `share/legacy/`: `rebuild-playable.sh` (→ `revert
+build`), the `run-*.sh` lane launchers (→ `revert run`), and the `run-*-trace.sh` RE
+diagnostics. Root keeps only `install.sh` — the live one-command bootstrap
+(`bash <(curl … install.sh)`), which chains `revert setup` + `acquire-game-data` + `build`.

@@ -5,8 +5,8 @@
 // input path (append + on-screen redraw) exactly like a physical keypress. We drive that from the
 // CONTROLLER (read via DirectInput — the pad is a DInput device, not XInput) or the keyboard.
 //
-// This build is a DIAGNOSTIC for controller mapping: it opens the DInput pad and logs which
-// buttons / POV values it reports, so we can map them. Keyboard F-key entry stays fully working.
+// Controller: D-pad/left-stick cycle the letter, A commits, X backspaces, Start = Enter/save.
+// Keyboard F-key entry (F5/F6/F7/F8/F10) stays fully working alongside it.
 #define DIRECTINPUT_VERSION 0x0800
 #include <windows.h>
 #include <dinput.h>
@@ -26,7 +26,19 @@ static void lg(const char* fmt, long a = 0, long b = 0) {
 }
 
 // ---- active text field detection ----
+// Safe read of our OWN process memory. ReadProcessMemory does the access check in the
+// kernel and returns FALSE (instead of faulting the caller) if the range is inaccessible.
+// The old scan dereferenced raw pointers straight from VirtualQuery results; THUG2 could
+// free / re-protect a region between the query and the read (a TOCTOU race), which Wine
+// tolerated but native Windows kills with 0xc0000005. Reading via RPM closes that hole.
+static bool safe_read(const void* addr, void* buf, size_t n) {
+    SIZE_T got = 0;
+    return ReadProcessMemory(GetCurrentProcess(), addr, buf, n, &got) && got == n;
+}
+
 static bool text_field_active() {
+    static unsigned char chunk[0x10000];              // reused 64 KB window (no per-scan malloc)
+    const size_t STEP = sizeof chunk - (OFF_ID + 4);  // overlap so a match on a chunk boundary isn't missed
     SYSTEM_INFO si; GetSystemInfo(&si);
     unsigned char* addr = (unsigned char*)si.lpMinimumApplicationAddress;
     unsigned char* end  = (unsigned char*)si.lpMaximumApplicationAddress;
@@ -38,9 +50,14 @@ static bool text_field_active() {
             bool rw = (pr == PAGE_READWRITE || pr == PAGE_EXECUTE_READWRITE ||
                        pr == PAGE_WRITECOPY || pr == PAGE_EXECUTE_WRITECOPY);
             if (rw && !(mbi.Protect & PAGE_GUARD) && mbi.RegionSize <= (512u << 20)) {
-                unsigned char* b = (unsigned char*)mbi.BaseAddress; size_t n = mbi.RegionSize;
-                for (size_t i = 0; i + OFF_ID + 4 <= n; i += 4)
-                    if (*(uint32_t*)(b + i) == VT_TEXTELEM && *(uint32_t*)(b + i + OFF_ID) == ID_KBCURSTR) return true;
+                unsigned char* base = (unsigned char*)mbi.BaseAddress;
+                size_t region = mbi.RegionSize;
+                for (size_t off = 0; off < region; off += STEP) {
+                    size_t want = region - off; if (want > sizeof chunk) want = sizeof chunk;
+                    if (!safe_read(base + off, chunk, want)) continue; // raced/freed -> skip, never fault
+                    for (size_t i = 0; i + OFF_ID + 4 <= want; i += 4)
+                        if (*(uint32_t*)(chunk + i) == VT_TEXTELEM && *(uint32_t*)(chunk + i + OFF_ID) == ID_KBCURSTR) return true;
+                }
             }
         }
         if (next <= addr) break; addr = next;
