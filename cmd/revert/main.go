@@ -25,6 +25,7 @@ const usage = `revert — front door for THUG2: Violet Vandal Edition (Windows-n
   revert calibrate-controller                detect the pad's DirectInput GUID + bind pad0
   revert install-desktop                     add Start Menu + Desktop shortcuts
   revert update [--check] [--force]          update to the latest release + rebuild
+  revert uninstall [--dry-run] [--yes] [--purge]   remove Revert (--purge also removes saves, THUG Pro, Go, packages)
   revert tag <image> [...]                   make an in-game Create-A-Graphic tag
   revert gui                                 launch the click-to-install web UI
   revert version                             print the release this build came from
@@ -67,6 +68,8 @@ func main() {
 		run(withConf(func(c *core.Conf) error { return core.InstallDesktop(c) }))
 	case "update":
 		run(withConf(func(c *core.Conf) error { return core.Update(c, parseUpdate(rest)) }))
+	case "uninstall":
+		run(withConf(func(c *core.Conf) error { return core.Uninstall(c, parseUninstall(rest)) }))
 	case "acquire-hq", "build-installer":
 		// Not part of the native-Windows lane; on Linux hand straight to the bash dispatcher.
 		run(withConf(func(c *core.Conf) error { return core.DelegateOrUnsupported(c, cmd, rest) }))
@@ -152,11 +155,29 @@ func parseUpdate(rest []string) core.UpdateOptions {
 	return o
 }
 
+func parseUninstall(rest []string) core.UninstallOptions {
+	var o core.UninstallOptions
+	for _, a := range rest {
+		switch a {
+		case "--dry-run":
+			o.DryRun = true
+		case "--yes", "-y":
+			o.Yes = true
+		case "--purge":
+			o.Purge = true
+		}
+	}
+	return o
+}
+
 func parseSetup(rest []string) core.SetupOptions {
 	var o core.SetupOptions
 	for _, a := range rest {
-		if a == "--online" {
+		switch a {
+		case "--online":
 			o.Online = true
+		case "--online-only":
+			o.OnlineOnly = true
 		}
 	}
 	return o

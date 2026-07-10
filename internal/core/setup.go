@@ -9,7 +9,8 @@ import (
 
 // SetupOptions mirror `revert setup`.
 type SetupOptions struct {
-	Online bool // also set up the THUG Pro online lane
+	Online     bool // also set up the THUG Pro online lane
+	OnlineOnly bool // ONLY set up THUG Pro (skip the base setup) — the GUI's install button
 }
 
 // Setup prepares the system to run the edition. On Linux it delegates to the heavy
@@ -19,7 +20,9 @@ type SetupOptions struct {
 func Setup(c *Conf, o SetupOptions) error {
 	if !IsWindows() {
 		args := []string{}
-		if o.Online {
+		if o.OnlineOnly {
+			args = append(args, "--online-only")
+		} else if o.Online {
 			args = append(args, "--online")
 		}
 		return DelegateToBash(c.Root, "setup", args...)
@@ -28,6 +31,15 @@ func Setup(c *Conf, o SetupOptions) error {
 }
 
 func setupWindows(c *Conf, o SetupOptions) error {
+	// The GUI's "install THUG Pro" button: do only the online lane, skip the base setup.
+	if o.OnlineOnly {
+		if thugProInstalled() {
+			ok("THUG Pro is already installed (online lane)")
+			return nil
+		}
+		return SetupThugPro(c)
+	}
+
 	fmt.Println("[revert] Windows setup — native (no Wine needed)")
 
 	// 1. DirectX 9 runtime (d3dx9_*.dll) — the one real native dependency for a 2004 game.
@@ -68,7 +80,10 @@ func setupWindows(c *Conf, o SetupOptions) error {
 		if thugProInstalled() {
 			ok("THUG Pro present (online lane)")
 		} else {
-			note("THUG Pro not installed — run its setup (THUGProSetup.exe) for the online lane")
+			// Acquire + launch the official installer so the online lane is one action.
+			if err := SetupThugPro(c); err != nil {
+				note("THUG Pro setup: " + err.Error())
+			}
 		}
 	}
 

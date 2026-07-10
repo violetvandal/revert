@@ -94,6 +94,22 @@ Keep machine-specific settings (e.g. `HQ_*_URL`, `GLYPH_STYLE`, a custom `GE_DIR
 wins), and never conflicts on update — edit `revert.conf` directly only if you want to
 change a default for everyone.
 
+## 6. Uninstalling
+```sh
+./revert uninstall            # preview the plan, then confirm
+./revert uninstall --dry-run  # show what would go, remove nothing
+./revert uninstall --purge    # full clean (see below)
+```
+The default removes the toolkit, the built editions, the Wine prefixes, the shortcuts and
+the controller bindings — **after backing up every save and created tag** to a dated
+`~/thug2-saves-backup-<date>/` folder. It **keeps** your saves' backup, the Go build tool,
+THUG Pro, and any shared system libraries.
+
+`--purge` is the full clean: it additionally deletes your saves **with no backup**, removes
+THUG Pro, and removes the Go toolchain and system packages **only if Revert installed them**
+(a Go or a library you already had is left alone). A GUI **Uninstall** button offers the same
+two depths behind a typed confirmation.
+
 ## Troubleshooting
 - `./revert doctor` first — it pinpoints missing deps/prefixes/inputs.
 - Controller has no L2/R2/walk: ensure `python3-evdev` + `/dev/uinput` access (doctor warns).

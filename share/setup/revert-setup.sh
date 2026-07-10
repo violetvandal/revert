@@ -45,11 +45,14 @@ IS_DECK=0; if is_steam_deck; then IS_DECK=1; fi
 # the 2023 wine-ge-8-26; a current wine is the one fix. (memory project_steamdeck_lane)
 WINE_DECK_URL="https://github.com/Kron4ek/Wine-Builds/releases/download/11.11/wine-11.11-staging-amd64.tar.xz"
 
-DO_PACKAGES=1; DO_ONLINE=0
+DO_PACKAGES=1; DO_ONLINE=0; SKIP_BASE=0
 for a in "$@"; do
   case "$a" in
     --no-packages) DO_PACKAGES=0;;
     --online)      DO_ONLINE=1;;
+    # Just the online (THUG Pro) lane: skip packages + the main prefix. Used by the GUI's
+    # "install THUG Pro" button so a one-off online install doesn't re-run the whole setup.
+    --online-only) DO_ONLINE=1; SKIP_BASE=1;;
   esac
 done
 
@@ -75,6 +78,22 @@ if [[ -f /run/ostree-booted ]]; then
 fi
 
 # ---- system packages ----------------------------------------------------------
+# `revert uninstall --purge` offers to remove the packages setup installed. It may only
+# remove the ones that were NOT already on the machine — pulling out a 32-bit SDL2 or
+# glibc that predates Revert would break unrelated software. So record exactly what this
+# run added, one "<manager> <package>" line per package, and never guess later.
+PKG_MANIFEST="${REVERT_ROOT}/.revert-packages"
+
+record_packages() {  # $1 = manager, rest = packages this run actually installed
+  local mgr="$1"; shift
+  (( $# )) || return 0
+  local p
+  for p in "$@"; do
+    grep -qxF "$mgr $p" "$PKG_MANIFEST" 2>/dev/null || printf '%s %s\n' "$mgr" "$p" >> "$PKG_MANIFEST"
+  done
+  log "  recorded $# newly-installed package(s) for a future uninstall --purge"
+}
+
 # Steam Deck: the 32-bit X libs THUG2's win32 wine needs (without them the game
 # can't create a window: nodrv_CreateWindow). The pad bridge is stdlib-only and
 # uinput is granted by ACL, so no python3-evdev needed on Deck.
@@ -84,19 +103,28 @@ install_packages_deck() {
     log "32-bit X libs already present"
     return 0
   fi
+  local new=() p
+  for p in "${libs[@]}"; do pacman -Qq "$p" >/dev/null 2>&1 || new+=("$p"); done
   log "installing 32-bit X libs (sudo; toggles SteamOS read-only + inits the pacman keyring)"
   ask_sudo steamos-readonly disable || warn "steamos-readonly disable failed"
   ask_sudo pacman-key --init        >/dev/null 2>&1 || true
   ask_sudo pacman-key --populate    >/dev/null 2>&1 || true   # keyring is empty on a fresh Deck
-  ask_sudo pacman -Sy --needed --noconfirm "${libs[@]}" \
-    || warn "pacman install failed — install these manually: ${libs[*]}"
+  if ask_sudo pacman -Sy --needed --noconfirm "${libs[@]}"; then
+    record_packages pacman "${new[@]}"
+  else
+    warn "pacman install failed — install these manually: ${libs[*]}"
+  fi
 }
 
 install_packages() {
   if (( IS_DECK )); then install_packages_deck; return $?; fi
   command -v dnf >/dev/null || { warn "non-Fedora system: install equivalents of winetricks p7zip msitools cabextract python3-evdev yourself"; return 0; }
+  local pkgs=(winetricks p7zip p7zip-plugins msitools cabextract python3-evdev)
+  local new=() p
+  for p in "${pkgs[@]}"; do rpm -q "$p" >/dev/null 2>&1 || new+=("$p"); done
   log "installing system packages (sudo)"
-  ask_sudo dnf install -y winetricks p7zip p7zip-plugins msitools cabextract python3-evdev
+  ask_sudo dnf install -y "${pkgs[@]}"
+  record_packages dnf "${new[@]}"
 }
 
 # ---- wine runtime presence ----------------------------------------------------
@@ -330,35 +358,86 @@ setup_controller() {  # $1 = prefix
   fi
 }
 
+# ---- online lane: Mono + THUG Pro installer (Wine) ----------------------------
+# THUG Pro's .NET launcher needs Mono in the online prefix. GE-Proton bundles a
+# wine-mono; copy it into the prefix's mono dir (msiexec install fails on path
+# translation, but the plain copy works — see memory project_thugpro_profile).
+setup_mono_online() {  # $1 = prefix
+  local pfx="$1" dst="$1/drive_c/windows/mono/mono-2.0"
+  [[ -d "$dst" ]] && { log "  Mono already present in the online prefix"; return 0; }
+  local src; src="$(ls -d "$GE_DIR"/share/wine/mono/wine-mono-* 2>/dev/null | sort -V | tail -1)"
+  if [[ -z "$src" || ! -d "$src" ]]; then
+    warn "  GE-Proton bundled Mono not found under $GE_DIR/share/wine/mono — THUG Pro's launcher may not start"
+    return 0
+  fi
+  mkdir -p "$(dirname "$dst")"
+  cp -a "$src" "$dst" && log "  Mono installed into the online prefix ($(basename "$src"))" \
+    || warn "  Mono copy failed"
+}
+
+# Acquire THUG Pro's official installer (BYO $THUGPRO_SETUP wins, else download
+# $THUGPRO_SETUP_URL) and run it under Wine in the online prefix. Skips cleanly if THUG Pro
+# is already installed, so it is safe to re-run. THUG Pro's own installer then asks for a
+# clean THUG2 folder and pulls the full build itself.
+acquire_launch_thugpro() {  # $1 = prefix
+  local pfx="$1"
+  local launcher="$pfx/drive_c/users/$USER/AppData/Local/THUG Pro/THUGProLauncher.exe"
+  if [[ -f "$launcher" ]]; then
+    log "  THUG Pro already installed in the online prefix — skipping installer"
+    return 0
+  fi
+  local exe="${THUGPRO_SETUP:-}"
+  if [[ -n "$exe" && -f "$exe" ]]; then
+    log "  using bundled THUG Pro installer: $exe"
+  else
+    local url="${THUGPRO_SETUP_URL:-}"
+    [[ -n "$url" ]] || { warn "  no THUG Pro installer (THUGPRO_SETUP) and no THUGPRO_SETUP_URL — install it manually"; return 0; }
+    command -v curl >/dev/null || { warn "  curl needed to download the THUG Pro installer"; return 0; }
+    exe="$REVERT_ROOT/.revert-thugpro-setup.exe"
+    log "  downloading the THUG Pro installer from $url"
+    curl -fL --retry 3 -o "$exe" "$url" || { warn "  THUG Pro installer download failed ($url)"; return 0; }
+  fi
+  log "  launching the THUG Pro installer under Wine — point it at a CLEAN THUG2 folder (not the modded edition)"
+  WINEPREFIX="$pfx" WINEDLLOVERRIDES="mscoree=b" WINEDEBUG=-all "$GE_WINE" "$exe" \
+    || warn "  the THUG Pro installer exited non-zero (if it did not appear, check that Mono installed above)"
+  [[ -f "$launcher" ]] && log "  THUG Pro installed. Play: revert run online" \
+    || note "  once THUG Pro finishes installing, launch it with: revert run online"
+}
+
 # ---- main ---------------------------------------------------------------------
-(( DO_PACKAGES )) && install_packages || log "skipping package install (--no-packages)"
+(( SKIP_BASE )) || { (( DO_PACKAGES )) && install_packages || log "skipping package install (--no-packages)"; }
 check_ge
 
-log "== main prefix (Vanilla + QOL-Modded) =="
-init_prefix "$PREFIX_MAIN"
-# On Bazzite/OSTree, z: -> / (composefs, 0 bytes free). Add d: so the game runs
-# on a drive backed by the real data partition and GetDiskFreeSpaceEx returns real stats.
-ln -sfn "$REVERT_ROOT" "${PREFIX_MAIN}/dosdevices/d:"
-(( IS_DECK )) && set_virtual_desktop "$PREFIX_MAIN" 1280x800
-install_dxvk "$PREFIX_MAIN"
-install_winetricks_components "$PREFIX_MAIN"
-set_winmm_override "$PREFIX_MAIN"
-set_dinput8_builtin "$PREFIX_MAIN"
-setup_controller "$PREFIX_MAIN"
-(( IS_DECK )) && setup_steam_shortcut_deck
+if (( ! SKIP_BASE )); then
+  log "== main prefix (Vanilla + QOL-Modded) =="
+  init_prefix "$PREFIX_MAIN"
+  # On Bazzite/OSTree, z: -> / (composefs, 0 bytes free). Add d: so the game runs
+  # on a drive backed by the real data partition and GetDiskFreeSpaceEx returns real stats.
+  ln -sfn "$REVERT_ROOT" "${PREFIX_MAIN}/dosdevices/d:"
+  (( IS_DECK )) && set_virtual_desktop "$PREFIX_MAIN" 1280x800
+  install_dxvk "$PREFIX_MAIN"
+  install_winetricks_components "$PREFIX_MAIN"
+  set_winmm_override "$PREFIX_MAIN"
+  set_dinput8_builtin "$PREFIX_MAIN"
+  setup_controller "$PREFIX_MAIN"
+  (( IS_DECK )) && setup_steam_shortcut_deck
+fi
 
 if (( DO_ONLINE )); then
   log "== online prefix (THUG Pro) =="
   init_prefix "$PREFIX_ONLINE"
   install_dxvk "$PREFIX_ONLINE"
-  warn "THUG Pro's .NET launcher needs Mono in the online prefix (WINEDLLOVERRIDES=mscoree=b).
-  Copy GE-Proton's bundled Mono into $PREFIX_ONLINE, then install THUG Pro into it.
-  See memory project_thugpro_profile for the exact steps (not auto-run here)."
+  setup_mono_online "$PREFIX_ONLINE"
+  acquire_launch_thugpro "$PREFIX_ONLINE"
 fi
 
 # App-menu launcher for the click-to-play GUI (no terminal needed afterwards).
-if [[ -x "${REVERT_ROOT}/revert" ]]; then
+if (( ! SKIP_BASE )) && [[ -x "${REVERT_ROOT}/revert" ]]; then
   "${REVERT_ROOT}/revert" install-desktop || warn "desktop launcher install skipped (non-fatal)"
 fi
 
-log "setup complete. Next: revert acquire-game-data  then  revert build  then  revert run qol"
+if (( SKIP_BASE )); then
+  log "online setup done."
+else
+  log "setup complete. Next: revert acquire-game-data  then  revert build  then  revert run qol"
+fi

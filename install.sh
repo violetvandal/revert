@@ -176,6 +176,9 @@ else
   tar -C "$HOME/.local" -xzf "/tmp/$tgz" || die "Go extract failed"; rm -f "/tmp/$tgz"
   export PATH="$HOME/.local/go/bin:$PATH"
   command -v go >/dev/null && ok "Go installed ($(go version | awk '{print $3}'))" || die "Go install failed"
+  # Mark that WE installed this Go, so `revert uninstall --purge` can remove it and a
+  # user's pre-existing Go is never touched. The marker moves into the clone below.
+  WE_INSTALLED_GO=1
 fi
 
 # ── 4. fetch the toolkit ──────────────────────────────────────────────────────
@@ -190,6 +193,12 @@ else
   ok "installed to $DEST"
 fi
 cd "$DEST" || die "cannot enter $DEST"
+
+# Leave a breadcrumb the uninstaller reads: only a Go WE fetched into ~/.local/go is safe
+# for `revert uninstall --purge` to remove. A Go the user already had stays put.
+if [[ "${WE_INSTALLED_GO:-0}" == 1 ]]; then
+  printf '%s\n' "$HOME/.local/go" > "$DEST/.revert-installed-go" 2>/dev/null || true
+fi
 
 # Put `revert` on your PATH so it runs from any folder (not just $DEST). The dispatcher
 # resolves its own root via `readlink -f`, so a symlink works correctly.

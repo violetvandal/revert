@@ -41,7 +41,7 @@ var webFS embed.FS
 var allowed = map[string]bool{
 	"doctor": true, "setup": true, "acquire-game-data": true, "acquire-hq": true,
 	"build": true, "run": true, "update": true, "tag": true, "help": true,
-	"calibrate-controller": true,
+	"calibrate-controller": true, "uninstall": true,
 }
 
 // ── install-location state ──────────────────────────────────────────────────

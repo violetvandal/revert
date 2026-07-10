@@ -51,6 +51,13 @@
     transition:.15s; font-size:13px; }
   button.act:hover:not(:disabled) { background:rgba(162,75,255,.28); color:var(--bone); }
   button.act:disabled { opacity:.4; cursor:not-allowed; }
+  .card.danger { border-color:rgba(226,90,110,.32); }
+  .card.danger h3 { color:#e6899a; }
+  label.purge { display:flex; gap:7px; align-items:flex-start; font-size:12px; color:var(--ash);
+    cursor:pointer; margin:2px 0 6px; line-height:1.45; }
+  label.purge input { margin-top:2px; flex:none; }
+  button.act.warn { border-color:rgba(226,90,110,.5); background:rgba(226,90,110,.12); color:#e6899a; }
+  button.act.warn:hover:not(:disabled) { background:rgba(226,90,110,.24); color:var(--bone); }
   #wizInstall { padding:11px 10px; font-size:14px; }
   .doneMsg { font-size:14px; color:var(--bone); margin:0 0 12px; }
   .doneMsg b { color:var(--ok); }
@@ -256,12 +263,26 @@
         <button class="act" data-cmd="run" data-args="lane">Play</button>
         <div class="lock" hidden></div>
       </div>
+      <div class="card" id="card-online" hidden>
+        <h3>Online · THUG Pro</h3>
+        <p>Play online via the THUG Pro total-conversion mod. This downloads THUG Pro's official installer and opens it; when it asks, point it at a clean THUG2 folder. Then choose "Online (THUG Pro)" above and press Play.</p>
+        <button class="act" data-cmd="setup" data-args="online">Download &amp; install THUG Pro</button>
+        <div class="hint">THUG Pro is a separate community app; its installer downloads the full build itself.</div>
+      </div>
       <div class="card" id="card-update">
         <h3>⟳ · Update</h3><p>Update to the latest release + rebuild.</p>
         <div class="hint" id="verLine" hidden></div>
         <button class="act" data-cmd="update" data-args="check">Check for updates</button>
         <button class="act" data-cmd="update" data-args="">Install update</button>
         <div class="hint">Installing replaces the toolkit binaries, then rebuilds. Your game data and saves are untouched. Restart this window afterwards.</div>
+      </div>
+
+      <div class="card danger" id="card-uninstall">
+        <h3>⌫ · Uninstall</h3>
+        <p>Remove Revert from this machine. Your saves and created tags are backed up to a dated folder in your home directory first.</p>
+        <label class="purge"><input type="checkbox" id="purge"> Full clean: also delete my saves (no backup), THUG Pro, and the tools Revert installed</label>
+        <div class="hint" id="uninstallHint">The default keeps your saves, the Go build tool, and shared system libraries.</div>
+        <button class="act warn" id="uninstallBtn" data-cmd="uninstall">Uninstall</button>
       </div>
     </section>
 
@@ -360,7 +381,7 @@ function applyGating() {
   };
   // These cards are always available; they only grey out while a command is running.
   // (querySelectorAll, not querySelector — the update card has two buttons.)
-  ['card-doctor', 'card-update'].forEach(id => {
+  ['card-doctor', 'card-update', 'card-uninstall', 'card-online'].forEach(id => {
     card(id).querySelectorAll('button.act[data-cmd]').forEach(btn => { btn.disabled = busy; });
   });
   gate('card-setup', state.wine && state.setup, true);
@@ -368,6 +389,10 @@ function applyGating() {
   gate('card-build', state.build, !!state.pristine, 'Acquire game data first (step 3).');
   gate('card-play', false, !!state.build && !!state.wine,
        state.build ? 'Run setup first (step 2).' : 'Build the edition first (step 4).');
+  // The "Download & install THUG Pro" card shows (on both platforms) only until THUG Pro is
+  // actually installed (state.online). Once it's in place, there's nothing left to do here.
+  const oc = card('card-online');
+  if (oc) oc.hidden = !!state.online;
 }
 
 function refreshStatus() {
@@ -390,6 +415,7 @@ function argsFor(btn) {
   if (spec === 'fast' && document.getElementById('fast').checked) out.push('--fast');
   if (spec === 'lane') out.push(document.getElementById('lane').value);
   if (spec === 'check') out.push('--check');
+  if (spec === 'online') out.push('--online-only');
   return out;
 }
 
@@ -407,7 +433,26 @@ function runCmd(cmd, args) {
 
 function wireManage() {
   document.querySelectorAll('#manage button.act[data-cmd]').forEach(btn => {
+    if (btn.id === 'uninstallBtn') return; // its own guarded handler, below
     btn.addEventListener('click', () => runCmd(btn.dataset.cmd, argsFor(btn)));
+  });
+  const purge = document.getElementById('purge');
+  purge.addEventListener('change', () => {
+    document.getElementById('uninstallHint').textContent = purge.checked
+      ? 'Full clean: your saves will NOT be backed up. THUG Pro, the Go build tool, and the packages Revert installed are removed too.'
+      : 'The default keeps your saves, the Go build tool, and shared system libraries.';
+  });
+  document.getElementById('uninstallBtn').addEventListener('click', () => {
+    const full = purge.checked;
+    const word = full ? 'PURGE' : 'UNINSTALL';
+    const msg = full
+      ? 'FULL CLEAN. This deletes your saves with no backup, plus THUG Pro and the tools Revert installed.\n\nType PURGE to confirm:'
+      : 'This removes Revert. Your saves are backed up to a dated folder in your home directory first.\n\nType UNINSTALL to confirm:';
+    const typed = window.prompt(msg);
+    if (typed !== word) { if (typed !== null) window.alert('Cancelled — you typed "' + typed + '", not ' + word + '.'); return; }
+    // The GUI has confirmed, so pass --yes; the CLI's own prompt is skipped.
+    const args = ['--yes']; if (full) args.push('--purge');
+    runCmd('uninstall', args);
   });
   document.getElementById('clear').addEventListener('click', () => {
     document.getElementById('log').textContent = ''; document.getElementById('badge').style.display = 'none';
@@ -705,6 +750,12 @@ fetch('/api/info').then(r => r.json()).then(info => {
       : 'Currently installed: ' + info.version;
     v.hidden = false;
   }
+  // The one-click "download & install THUG Pro" card is a native-Windows feature, and only
+  // until THUG Pro is installed. applyGating() (driven by /api/status.online) is authoritative
+  // for its visibility; record the platform here so it can gate correctly.
+  // Default hidden; applyGating() (driven by status.online) reveals the THUG Pro install
+  // card while THUG Pro is absent, on both Windows and Linux.
+  const oc0 = document.getElementById('card-online'); if (oc0) oc0.hidden = true;
   // On native Windows there's no Wine — retitle the setup step and use a Windows-style
   // path hint so the panel doesn't describe a Linux flow.
   if (info.os === 'windows') {

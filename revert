@@ -14,6 +14,7 @@
 #   revert calibrate-controller            (Deck) detect + bind the controller pad GUID
 #   revert tag <image> [...]               make an in-game Create-A-Graphic tag
 #   revert update [--check]                update to the latest release + rebuild
+#   revert uninstall [--purge]             remove Revert (--purge = also saves/Go/packages)
 #   revert status [--json]                 report lifecycle state (used by the GUI)
 #   revert version                         print the release this checkout is on
 #
@@ -40,7 +41,7 @@ bad()  { printf '  %s✗%s %s\n' "$c_red" "$c_off" "$*"; }
 note() { printf '  %s· %s%s\n' "$c_dim" "$*" "$c_off"; }
 
 usage() {
-  sed -n '3,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '3,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -220,7 +221,9 @@ cmd_status() {
   [[ -x "$THUGKIT" ]] && "$THUGKIT" 2>&1 | grep -q build && thugkit=true
   [[ -d "$PRISTINE_DIR/Data/pre" ]]              && pristine=true
   [[ -d "$EDITION_QOL/Data/pre" ]]               && build=true
-  [[ -d "$PREFIX_ONLINE" ]]                      && online=true
+  # "online" = THUG Pro actually installed (its launcher exists), matching the Windows
+  # thugProInstalled() signal, so the GUI can hide the install card once it's in place.
+  [[ -f "$LANE_ONLINE_DIR/THUGProLauncher.exe" ]] && online=true
   if [[ "${1:-}" == "--json" ]]; then
     printf '{"wine":%s,"setup":%s,"thugkit":%s,"pristine":%s,"build":%s,"online":%s}\n' \
       "$wine" "$setup" "$thugkit" "$pristine" "$build" "$online"
@@ -231,13 +234,20 @@ cmd_status() {
   $setup    && ok "main prefix"         || bad "main prefix (run: revert setup)"
   $pristine && ok "pristine game data"  || bad "pristine game data (run: revert acquire-game-data)"
   $build    && ok "edition built"       || bad "edition built (run: revert build)"
-  $online   && ok "online prefix"       || note "online prefix (THUG Pro lane, optional)"
+  $online   && ok "THUG Pro installed"  || note "THUG Pro not installed (online lane, optional: revert setup --online)"
 }
 
 # ---- update: pull the latest tagged release + rebuild --------------------------
 cmd_update() {
   local s="${SHARE_DIR}/setup/revert-update.sh"
   [[ -x "$s" ]] || err "revert-update.sh missing or not executable ($s)"
+  exec "$s" "$@"
+}
+
+# ---- uninstall: remove what Revert installed (default | --purge full clean) -----
+cmd_uninstall() {
+  local s="${SHARE_DIR}/setup/revert-uninstall.sh"
+  [[ -x "$s" ]] || err "revert-uninstall.sh missing or not executable ($s)"
   exec "$s" "$@"
 }
 
@@ -324,6 +334,7 @@ case "${1:-help}" in
   acquire-game-data) shift; cmd_acquire "$@";;
   acquire-hq)        shift; cmd_acquire_hq "$@";;
   update)            shift; cmd_update "$@";;
+  uninstall)         shift; cmd_uninstall "$@";;
   status)            shift; cmd_status "$@";;
   build)             shift; cmd_build "$@";;
   run)               shift; cmd_run "$@";;

@@ -59,11 +59,26 @@ func runWindows(c *Conf, o RunOptions) error {
 			exe = "THUGProLauncher.exe"
 		}
 	}
+	// Vanilla = the genuine unmodded original. Run the pristine base directly (always present
+	// after acquire) instead of a separate modded "vanilla edition" build — the build applies
+	// the same mods to every edition, so a built game-modded-vanilla would not be vanilla.
+	if o.Lane == "vanilla" {
+		if p := c.Path("PRISTINE_DIR"); p != "" {
+			dir = p
+		}
+	}
 	if dir == "" || exe == "" {
 		return fmt.Errorf("unknown lane %q (use: vanilla | qol | online)", o.Lane)
 	}
 	if !dirExists(dir) {
-		return fmt.Errorf("lane dir missing: %s (run: revert build, or install THUG Pro for the online lane)", dir)
+		switch o.Lane {
+		case "online":
+			return fmt.Errorf("THUG Pro isn't installed yet (%s) — run: revert setup --online", dir)
+		case "vanilla":
+			return fmt.Errorf("no game data yet (%s) — run: revert acquire-game-data", dir)
+		default:
+			return fmt.Errorf("the %s edition isn't built yet (%s) — run: revert build", o.Lane, dir)
+		}
 	}
 
 	glyphs := resolveGlyphs(firstNonEmpty(o.Glyphs, c.GetOr("GLYPH_STYLE", "auto")))

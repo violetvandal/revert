@@ -96,3 +96,10 @@ gui/dist/
 
 # acquire --url temp workdir (auto-cleaned on graceful exit; lingers if a download is killed)
 .revert-acquire.*/
+
+# Uninstall breadcrumbs written by install.sh / revert-setup.sh (record what to purge)
+.revert-installed-go
+.revert-packages
+
+# Downloaded THUG Pro installer stub (fetched by `revert setup --online`; re-fetched on demand)
+.revert-thugpro-setup.exe
