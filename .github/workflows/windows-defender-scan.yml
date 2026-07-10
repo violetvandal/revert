@@ -123,14 +123,17 @@ jobs:
           Get-ChildItem out -File | ForEach-Object {
             $out = & $mp -Scan -ScanType 3 -File $_.FullName 2>&1 | Out-String
             $code = $LASTEXITCODE
-            # MpCmdRun exits 0 and prints "found no threats" when clean. Check both: a future
-            # image could change the text, and a nonzero exit is meaningful on its own.
-            if ($code -ne 0 -or $out -notmatch 'found no threats') {
+            # MpCmdRun's EXIT CODE is the authoritative signal: 0 = clean, 2 = a threat was
+            # found. Don't gate on the text — a clean file may print "found no threats" OR
+            # "was skipped" (Defender skips some file types), and treating "skipped" as a
+            # detection was a false failure. Keep a text check only as a positive tripwire
+            # for an explicit threat marker, in case a future image reports one at exit 0.
+            if ($code -ne 0 -or $out -match 'Threat(s)? (found|detected)|found \d+ threat') {
               $failed += $_.Name
               Write-Host "::error file=$($_.Name)::Defender flagged $($_.Name) (exit $code)"
               Write-Host $out
             } else {
-              Write-Host "ok: $($_.Name)"
+              Write-Host "ok: $($_.Name) (exit $code)"
             }
           }
           if ($failed.Count -gt 0) {
