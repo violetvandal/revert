@@ -22,7 +22,10 @@ type RunOptions struct {
 // loader and the .asi mods resolve), set VV_GLYPHS, optionally swap the soundtrack and
 // start the native controller-combo helper, then run THUG2.exe directly.
 func Run(c *Conf, o RunOptions) error {
-	if !IsWindows() {
+	if IsMac() {
+		return runMac(c, o)
+	}
+	if IsLinux() {
 		args := []string{o.Lane}
 		if o.Soundtrack != "" {
 			args = append(args, "--soundtrack", o.Soundtrack)

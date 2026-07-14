@@ -166,9 +166,15 @@ run_hook() {
       if ! is_steam_deck; then
         if [[ -f "${PAD_PROBE:-}" ]]; then
           local guid
+          # `|| true` is load-bearing: under `set -euo pipefail`, a command-substitution
+          # assignment inherits the pipeline's exit status, and pipefail makes the pipeline
+          # non-zero whenever the wine probe exits non-zero — which it does on a cold wineserver
+          # OR when no controller is attached. Without this guard that silently aborts the whole
+          # launch (set -e) instead of falling through to the "no gamepad detected" branch below,
+          # so `revert run` refuses to start with just a keyboard. Keep it.
           guid="$(WINEDEBUG=-all timeout 30 "$GE_DIR/bin/wine" "$PAD_PROBE" 2>/dev/null \
                   | awk '/-> GAMEPAD/{g=1} g&&/guidInstance=/{sub(/.*guidInstance=/,"");print;exit}' \
-                  | tr -d '[:space:]')"
+                  | tr -d '[:space:]')" || true
           if [[ "$guid" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$ ]]; then
             WINEDEBUG=-all "$GE_DIR/bin/wine" reg add \
               "HKCU\\Software\\Activision\\Tony Hawk's Underground 2\\Settings" \

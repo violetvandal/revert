@@ -64,6 +64,10 @@ func main() {
 		run(withConf(func(c *core.Conf) error { return core.LaunchGUI(c, rest) }))
 	case "calibrate-controller":
 		run(withConf(func(c *core.Conf) error { return core.Calibrate(c) }))
+	case "controls":
+		// macOS "THUG2 Controls.app" launches this: THUG2's own Launcher.exe, the escape
+		// hatch if a pad ever needs re-binding by hand.
+		run(withConf(func(c *core.Conf) error { return core.Controls(c) }))
 	case "install-desktop":
 		run(withConf(func(c *core.Conf) error { return core.InstallDesktop(c) }))
 	case "update":
@@ -108,13 +112,13 @@ func run(fn func() error) {
 
 func cmdStatus(c *core.Conf, rest []string) error {
 	if len(rest) > 0 && rest[0] == "--json" {
-		if core.IsWindows() {
+		if core.IsNative() {
 			core.StatusJSON(c)
 			return nil
 		}
 		return core.DelegateToBash(c.Root, "status", "--json")
 	}
-	if !core.IsWindows() {
+	if !core.IsNative() {
 		return core.DelegateToBash(c.Root, "status")
 	}
 	return core.Doctor(c)

@@ -22,8 +22,12 @@ var guidRe = regexp.MustCompile(`[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0
 // thug2-settings.reg carries a placeholder pad0 that is unlikely to match a given machine's
 // real DirectInput instance GUID, so it must be detected live.
 func Calibrate(c *Conf) error {
-	if !IsWindows() {
+	if IsLinux() {
 		return DelegateToBash(c.Root, "calibrate-controller")
+	}
+	// macOS runs the same probe, but under wine and against the lane's prefix.
+	if IsMac() {
+		return calibrateMac(c, macResolve(c))
 	}
 	guid, err := detectPadGUID(c)
 	if err != nil {

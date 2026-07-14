@@ -67,7 +67,7 @@ func uwarn(format string, a ...any) { fmt.Fprintf(os.Stderr, "[update:warn] "+fo
 // swaps the binaries in place. Game data (the pristine base, the built edition, and your
 // Save/) is never read or written.
 func Update(c *Conf, o UpdateOptions) error {
-	if !IsWindows() {
+	if IsLinux() {
 		var args []string
 		if o.Check {
 			args = append(args, "--check")
@@ -76,6 +76,12 @@ func Update(c *Conf, o UpdateOptions) error {
 			args = append(args, "--force")
 		}
 		return DelegateToBash(c.Root, "update", args...)
+	}
+	// macOS installs are a git clone (from the installer), so an update is git-based, like
+	// Linux — fetch → checkout the latest release tag → rebuild — plus rebuilding the native
+	// Go dispatcher. Implemented in mac.go.
+	if IsMac() {
+		return updateMac(c, o)
 	}
 	return updateWindows(c, o)
 }

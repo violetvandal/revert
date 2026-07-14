@@ -30,21 +30,33 @@ KP7, KP9, KP1    = ecodes.KEY_KP7, ecodes.KEY_KP9, ecodes.KEY_KP1
 TRIG_ON, TRIG_OFF = 100, 60                          # trigger hysteresis
 
 def find_pad():
+    # Identify the pad by CAPABILITY, not by name. The bridge needs both triggers as
+    # axes (ABS_Z/ABS_RZ) and both bumpers (BTN_TL/BTN_TR); any XInput-style gamepad the
+    # kernel binds via xpad exposes exactly that, regardless of brand. The old code
+    # name-matched "Xbox"/"360", so it silently ignored 8BitDo (and every other
+    # non-Microsoft XInput pad) — those enumerate under their own product name even
+    # though their layout is identical. Prefer a Microsoft/Xbox-named pad when several
+    # match (unchanged behaviour on setups that have one), else take the first capable one.
+    picks = []
     for path in evdev.list_devices():
         try:
             d = evdev.InputDevice(path)
         except Exception:
             continue
-        abscodes = [c for c, _ in d.capabilities().get(ecodes.EV_ABS, [])]
-        if any(s in d.name for s in ("X-Box", "Xbox", "360", "Microsoft X-Box")) \
-           and ecodes.ABS_Z in abscodes and ecodes.ABS_RZ in abscodes:
+        caps = d.capabilities()
+        absc = {c for c, _ in caps.get(ecodes.EV_ABS, [])}
+        keyc = set(caps.get(ecodes.EV_KEY, []))
+        if {ecodes.ABS_Z, ecodes.ABS_RZ} <= absc and {ecodes.BTN_TL, ecodes.BTN_TR} <= keyc:
+            picks.append(d)
+    for d in picks:
+        if any(s in d.name for s in ("X-Box", "Xbox", "360", "Microsoft X-Box")):
             return d
-    return None
+    return picks[0] if picks else None
 
 def main():
     dev = find_pad()
     if not dev:
-        print("shoulder-bridge: no Xbox-style pad found", file=sys.stderr)
+        print("shoulder-bridge: no XInput-style pad found (need trigger axes + bumpers)", file=sys.stderr)
         return 1
     ui = UInput({ecodes.EV_KEY: [KP7, KP9, KP1]}, name="thug2-shoulder-bridge")
 

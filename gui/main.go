@@ -41,7 +41,7 @@ var webFS embed.FS
 var allowed = map[string]bool{
 	"doctor": true, "setup": true, "acquire-game-data": true, "acquire-hq": true,
 	"build": true, "run": true, "update": true, "tag": true, "help": true,
-	"calibrate-controller": true, "uninstall": true,
+	"calibrate-controller": true, "configure-controller": true, "uninstall": true,
 }
 
 // ── install-location state ──────────────────────────────────────────────────
@@ -186,11 +186,11 @@ func main() {
 		mode = "installer (no toolkit found yet)"
 	}
 	fmt.Printf("Revert GUI running at %s\n  mode: %s\n", url, mode)
-	// On Windows the GUI is launched by double-clicking revert-gui.exe, which leaves a
-	// console window sitting behind the browser. Exit when the browser tab closes so that
-	// window closes too. On Linux/Deck the GUI is launched from a terminal or a .desktop
-	// whose lifecycle the user manages, so keep the Ctrl-C behavior there, untouched.
-	if runtime.GOOS == "windows" {
+	// On Windows AND macOS the GUI is launched as a downloaded installer, leaving a console
+	// (Windows) or Terminal (macOS) window sitting behind the browser. Exit when the browser
+	// tab closes so that window goes away too. On Linux/Deck the GUI runs from a terminal or a
+	// .desktop whose lifecycle the user manages, so keep the Ctrl-C behavior there, untouched.
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		fmt.Println("(closes automatically when you close the browser tab)")
 		go watchBrowser()
 	} else {
@@ -234,9 +234,25 @@ func watchBrowser() {
 		beat := lastBeat.Load()
 		if beat == 0 || time.Since(time.Unix(0, beat)) > grace {
 			fmt.Println("Browser closed — shutting down.")
+			closeTerminalWindowMac()
 			os.Exit(0)
 		}
 	}
+}
+
+// closeTerminalWindowMac best-effort closes the Terminal window the installer was launched
+// from, so on macOS the whole thing disappears when the browser tab closes (matching the
+// Windows console behavior) rather than leaving a dead Terminal at a prompt. Guarded to
+// Apple Terminal; the short delay lets THIS process exit first, so Terminal's `close` doesn't
+// prompt about a still-running process. A no-op elsewhere (Linux/Deck never call watchBrowser,
+// and other terminals / launch-from-Finder just skip it).
+func closeTerminalWindowMac() {
+	if runtime.GOOS != "darwin" || os.Getenv("TERM_PROGRAM") != "Apple_Terminal" {
+		return
+	}
+	_ = exec.Command("osascript",
+		"-e", "delay 0.4",
+		"-e", `tell application "Terminal" to close front window`).Start()
 }
 
 // infoHandler reports the toolkit root (empty if not installed), whether it was found,

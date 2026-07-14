@@ -15,8 +15,14 @@
 //    morph so it stays top-left. (Side effect: its slide-in is suppressed; alpha fade is kept.)
 //
 // Runs alongside the stock WidescreenFix. No-ops if FixHUD is off (offset==0).
+//
+// The hook itself lives in ../common/vv_hook.h, because VV.KeyboardGrid hooks the SAME address
+// and a second raw 5-byte jmp here would silently overwrite whichever of us loaded first. See
+// that header — the chaining is the whole point of it.
 #include <windows.h>
 #include <cstdint>
+#include <cstring>
+#include "../common/vv_hook.h"
 
 static int32_t* const HUD_OFFSET = (int32_t*)0x00786d88;
 static float*   const HUD_SCALE  = (float*)  0x00786d80;
@@ -26,14 +32,31 @@ static const int XO[4] = {0x90, 0x9c, 0xd4, 0xe0};
 
 extern "C" volatile uint32_t* g_gpd = nullptr;   // goal_points_display element (animated)
 
+// readable(p,n) — is p..p+n committed and readable?
+//
+// NOT IsBadReadPtr. IsBadReadPtr validates by faulting and catching, and on Apple Silicon every
+// fault is a Mach round-trip through Rosetta's exception path. The worker below runs at 250 Hz,
+// so the old code drove that fault path a thousand times a second — and the crash log shows this
+// thread taking an access violation inside the probe and unwinding into "Exception frame is not
+// in stack limits". VirtualQuery asks the kernel the same question without ever faulting.
+static bool readable(const void* p, size_t n) {
+    MEMORY_BASIC_INFORMATION mbi;
+    if (!VirtualQuery(p, &mbi, sizeof mbi)) return false;
+    if (mbi.State != MEM_COMMIT) return false;
+    if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return false;
+    const uint8_t* base = (const uint8_t*)mbi.BaseAddress;
+    return (const uint8_t*)p + n <= base + mbi.RegionSize;   // no straddle into the next region
+}
+
 static bool hud_voff(float* out) {
-    if (IsBadReadPtr((void*)HUD_OFFSET,4) || IsBadReadPtr((void*)HUD_SCALE,4)) return false;
+    if (!readable(HUD_OFFSET, 4) || !readable(HUD_SCALE, 4)) return false;
     float scale = *HUD_SCALE; int32_t off = *HUD_OFFSET;
     if (scale <= 0.01f || off == 0) return false;
     *out = (float)off / scale; return true;
 }
 
-extern "C" void on_resolve(uint32_t* el) {
+extern "C" void hud_on_resolve(uint32_t* el) {
+    if (!el) return;
     uint32_t id = el[0x14/4];
     if (id == ID_SCORE) {
         float voff; if (!hud_voff(&voff)) return;
@@ -43,26 +66,14 @@ extern "C" void on_resolve(uint32_t* el) {
     }
 }
 
-__attribute__((naked)) static void detour() {        // hook body at 0x4aae53 (eax = element)
-    asm volatile(
-        "pusha\n\t" "pushf\n\t"
-        "push %eax\n\t" "call _on_resolve\n\t" "add $4,%esp\n\t"
-        "popf\n\t" "popa\n\t"
-        "push %esi\n\t" "lea 0xc(%esp),%ecx\n\t"
-        "push $0x004aae58\n\t" "ret\n\t");
-}
+VV_HOOK_DETOUR(hud_detour, hud_on_resolve)           // hook body at 0x4aae53 (eax = element)
 
 static DWORD WINAPI worker(LPVOID) {
-    Sleep(6000);
-    uint8_t* hook = (uint8_t*)0x004aae53; DWORD old;
-    VirtualProtect(hook, 5, PAGE_EXECUTE_READWRITE, &old);
-    hook[0] = 0xE9; *(int32_t*)(hook+1) = (int32_t)&detour - (int32_t)(hook+5);
-    VirtualProtect(hook, 5, old, &old);
-    // continuously pin the animated goal-points container to the left
+    // Pin the animated goal-points container to the left. No code patching here any more.
     for (;;) {
         Sleep(4);
-        volatile uint32_t* el = g_gpd;
-        if (!el || IsBadReadPtr((void*)el, 0x100)) continue;
+        uint32_t* el = (uint32_t*)g_gpd;
+        if (!el || !readable(el, 0x100)) continue;
         if (el[0x14/4] != ID_GPTS) { g_gpd = nullptr; continue; }   // freed/reused -> drop
         float voff; if (!hud_voff(&voff)) continue;
         float target = 0.0f - voff;                                  // raw X is 0 (canvas left)
@@ -72,6 +83,11 @@ static DWORD WINAPI worker(LPVOID) {
 }
 
 BOOL APIENTRY DllMain(HMODULE h, DWORD r, LPVOID) {
-    if (r == DLL_PROCESS_ATTACH) { DisableThreadLibraryCalls(h); CreateThread(0,0,worker,0,0,0); }
+    if (r == DLL_PROCESS_ATTACH) {
+        DisableThreadLibraryCalls(h);
+        vv_install_hook((void*)&hud_detour);   // cold, before any game thread runs; chains if
+                                               // VV.KeyboardGrid already hooked the same site
+        CreateThread(0,0,worker,0,0,0);        // pinning only
+    }
     return TRUE;
 }

@@ -89,4 +89,7 @@ if __name__ == "__main__":
     im = build()
     im.save(os.path.join(out, "revert-512.png"))
     im.save(os.path.join(out, "revert.ico"), format="ICO", sizes=[(s, s) for s in ICO_SIZES])
-    print("wrote revert.ico + revert-512.png ->", out)
+    # macOS .app-bundle icon. PIL writes a full multi-size .icns from a 1024 base; the
+    # macOS lane copies this into each bundle's Contents/Resources (see internal/core/mac.go).
+    im.resize((1024, 1024), Image.LANCZOS).save(os.path.join(out, "revert.icns"), format="ICNS")
+    print("wrote revert.ico + revert.icns + revert-512.png ->", out)

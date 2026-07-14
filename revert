@@ -12,6 +12,7 @@
 #   revert gui                             launch the click-to-install web UI (no terminal)
 #   revert install-desktop                 add an app-menu launcher for the GUI
 #   revert calibrate-controller            (Deck) detect + bind the controller pad GUID
+#   revert configure-controller            bind ANY controller via THUG2's own Launcher
 #   revert tag <image> [...]               make an in-game Create-A-Graphic tag
 #   revert update [--check]                update to the latest release + rebuild
 #   revert uninstall [--purge]             remove Revert (--purge = also saves/Go/packages)
@@ -25,6 +26,42 @@
 # NOTE: Revert ships TOOLING, never game data — you must own THUG2.
 #
 set -euo pipefail
+
+# ---- macOS: hand straight over to the native Go front door -----------------------
+# This dispatcher is Linux-specific from top to bottom (GE-Proton, lutris paths, apt/pacman,
+# evdev) and cannot even locate itself on a Mac: the line below needs GNU `readlink -f`, and
+# macOS ships the BSD readlink, which has no -f. The Mac lane is implemented natively in Go
+# (internal/core/mac.go), so exec it before anything else runs.
+#
+# The Go binary must NOT delegate back here — that would ping-pong forever. It won't:
+# delegation is gated on IsLinux(), with a hard guard in DelegateToBash.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  # Resolve symlinks by hand. install.sh links this script into ~/.local/bin/revert, and
+  # without following that link we would look for the toolkit in ~/.local/bin. GNU's
+  # `readlink -f` would do this in one call; BSD readlink (which is what macOS ships) only
+  # reads a single link, so walk the chain.
+  _src="${BASH_SOURCE[0]}"
+  while [[ -L "$_src" ]]; do
+    _dir="$(cd -P "$(dirname "$_src")" && pwd)"
+    _src="$(readlink "$_src")"
+    [[ "$_src" != /* ]] && _src="${_dir}/${_src}"
+  done
+  _root="$(cd -P "$(dirname "$_src")" && pwd)"
+  _bin="${_root}/bin/revert"
+  if [[ ! -x "$_bin" ]]; then
+    _go="$(command -v go 2>/dev/null || true)"
+    for _cand in "$HOME/.local/go/bin/go" /opt/homebrew/bin/go /usr/local/bin/go; do
+      [[ -n "$_go" ]] && break
+      [[ -x "$_cand" ]] && _go="$_cand"
+    done
+    [[ -n "$_go" ]] || { echo "revert: Go is required to build the macOS front door (brew install go)" >&2; exit 1; }
+    echo "[revert] building the macOS front door (one time)…" >&2
+    ( cd "$_root" && "$_go" build -o bin/revert ./cmd/revert ) \
+      || { echo "revert: could not build bin/revert" >&2; exit 1; }
+  fi
+  export REVERT_ROOT="$_root"
+  exec "$_bin" "$@"
+fi
 
 REVERT_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 export REVERT_ROOT
@@ -211,6 +248,35 @@ cmd_calibrate() {
   exec "$s" "$@"
 }
 
+# ---- configure-controller: bind ANY pad via THUG2's own Launcher ----------------
+# The universal controller path. XInput-mode pads (Xbox, 8BitDo, most modern pads in
+# "X" mode) already work out of the box — setup imports a standard map and the trigger
+# bridge is layout-agnostic. But any OTHER pad (a PlayStation controller left in DInput
+# mode, an arcade stick, an oddball HID gamepad) can be bound by hand here: Launcher.exe
+# is THUG2's own config tool, so it enumerates whatever Wine sees and writes the gp0_*
+# map for THAT device. We deliberately don't ship per-controller maps; we let the user
+# bind what they have.
+#
+# The rebind only touches the gamepad map: pad0 is still probed live on each launch, and
+# the k0_ numpad keys the trigger bridge injects are left intact.
+cmd_configure_controller() {
+  [[ -x "$GE_DIR/bin/wine" ]] || err "Wine not installed ($GE_DIR/bin/wine) — run: revert setup"
+  [[ -d "$PREFIX_MAIN" ]]     || err "no Wine prefix ($PREFIX_MAIN) — run: revert setup"
+  local dir="$EDITION_QOL"
+  [[ -f "$dir/Launcher.exe" ]] || dir="$PRISTINE_DIR"
+  [[ -f "$dir/Launcher.exe" ]] || err "Launcher.exe not found — build the edition first: revert build"
+
+  log "Opening THUG2's controller config (Launcher.exe)."
+  note "Bind each control to your pad, then Save and close the Launcher."
+  note "Tip: most controllers 'just work' if switched to XInput / \"X\" mode — this is for the rest."
+  # winmm=native (WSFix loader) + dinput8=builtin (so DirectInput enumerates the pad),
+  # matching the game launch, or the Launcher won't see the controller.
+  cd "$dir"
+  WINEPREFIX="$PREFIX_MAIN" WINEDLLOVERRIDES="winmm=n,b;dinput8=b" WINEDEBUG=-all \
+    "$GE_DIR/bin/wine" Launcher.exe || true
+  log "Controller config saved. Play: revert run qol"
+}
+
 # ---- status: machine-readable lifecycle state (for the GUI) --------------------
 # Same signals doctor prints, but as booleans the GUI uses to gate steps. Passive:
 # stats paths only, never mutates. `--json` emits one JSON object on stdout.
@@ -342,6 +408,7 @@ case "${1:-help}" in
   install-desktop)   shift; cmd_install_desktop "$@";;
   build-installer)   shift; cmd_build_installer "$@";;
   calibrate-controller) shift; cmd_calibrate "$@";;
+  configure-controller|controls) shift; cmd_configure_controller "$@";;
   tag)               shift; cmd_tag "$@";;
   help|-h|--help)    usage 0;;
   *) echo "revert: unknown command '${1:-}'" >&2; usage 1;;

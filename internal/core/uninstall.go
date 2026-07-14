@@ -23,7 +23,7 @@ import (
 // On Linux/Steam Deck this delegates to share/setup/revert-uninstall.sh, which owns the
 // Wine prefixes, the Steam shortcut and the package manifest. Windows is native.
 func Uninstall(c *Conf, o UninstallOptions) error {
-	if !IsWindows() {
+	if IsLinux() {
 		var args []string
 		if o.DryRun {
 			args = append(args, "--dry-run")
@@ -35,6 +35,9 @@ func Uninstall(c *Conf, o UninstallOptions) error {
 			args = append(args, "--purge")
 		}
 		return DelegateToBash(c.Root, "uninstall", args...)
+	}
+	if IsMac() {
+		return uninstallMac(c, o)
 	}
 	return uninstallWindows(c, o)
 }

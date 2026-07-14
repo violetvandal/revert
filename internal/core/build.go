@@ -20,7 +20,7 @@ type BuildOptions struct {
 // core (identical seam to bash), then the optional Python CAS post-pass and credits
 // movies. thugkit itself is already 100% cross-platform and byte-identical.
 func Build(c *Conf, o BuildOptions) error {
-	if !IsWindows() {
+	if IsLinux() {
 		args := []string{}
 		if o.Fast {
 			args = append(args, "--fast")
@@ -36,7 +36,13 @@ func Build(c *Conf, o BuildOptions) error {
 
 	tk := c.Thugkit()
 	if !thugkitHasBuild(tk) {
-		return fmt.Errorf("thugkit.exe with 'build' not found at %s (the Windows bundle ships it prebuilt)", tk)
+		// macOS has a Go toolchain (setup guarantees it), so a missing or wrong-architecture
+		// thugkit is recoverable — just build it. Erroring out here instead cost real time:
+		// a stray Linux binary in the tree kept clobbering the Mac's, and `revert build` then
+		// failed in a way that was easy to miss.
+		if err := macEnsureThugkit(c); err != nil {
+			return fmt.Errorf("thugkit with 'build' not found at %s: %w", tk, err)
+		}
 	}
 
 	lane := o.Lane
@@ -69,9 +75,32 @@ func Build(c *Conf, o BuildOptions) error {
 			args = append(args, "--hq-audio", hq)
 		}
 	}
-	args = appendFlagIfFile(args, "--hudfix", c.Path("HUDFIX_ASI"))
-	args = appendFlagIfFile(args, "--glyphfix", c.Path("GLYPHFIX_ASI"))
-	args = appendFlagIfFile(args, "--keyboardgrid", c.Path("KEYBOARDGRID_ASI"))
+	// The three VV .asi mods (Xbox trick glyphs, top-left HUD, controller text entry) hook
+	// the renderer and the input loop. They ship on every platform, macOS included: the menu
+	// freeze that used to keep them off the Mac was HudFix/GlyphFix patching live code from a
+	// worker thread (a torn write, unsound under Rosetta), and both now patch cold in DllMain.
+	// They are still selectable INDIVIDUALLY on macOS (see macEnabledVVMods) so any future
+	// regression can be bisected without recompiling.
+	vv := macEnabledVVMods(c)
+	asi := map[string]string{
+		"hudfix":       c.Path("HUDFIX_ASI"),
+		"glyphfix":     c.Path("GLYPHFIX_ASI"),
+		"keyboardgrid": c.Path("KEYBOARDGRID_ASI"),
+	}
+	var on, off []string
+	for _, m := range vvMods {
+		if vv[m] {
+			args = appendFlagIfFile(args, "--"+m, asi[m])
+			on = append(on, m)
+		} else {
+			off = append(off, m)
+		}
+	}
+	if IsMac() && len(off) > 0 {
+		note("macOS: VV .asi mods — ON: " + orNone(on) + " · OFF: " + orNone(off))
+		note("  all three are stable on macOS now; select a subset with MAC_VV_ASI in")
+		note("  revert.conf.local:  all | none | a list, e.g. MAC_VV_ASI=\"hudfix\"")
+	}
 	args = appendFlagIfDir(args, "--tags", c.Path("TAGS_DIR"))
 	if o.Only != "" {
 		args = append(args, "--only", o.Only)
@@ -81,6 +110,10 @@ func Build(c *Conf, o BuildOptions) error {
 	if err := runInherit(c.Root, nil, tk, args...); err != nil {
 		return fmt.Errorf("thugkit build failed: %w", err)
 	}
+
+	// thugkit only ADDS mods and --fast does not re-lay the edition, so a mod turned off in
+	// the config would otherwise linger from a previous build. Make the config authoritative.
+	macPruneDisabledASIs(edition, vv)
 
 	casPostPass(c, edition)
 	installCreditsMovies(c, edition)

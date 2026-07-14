@@ -20,7 +20,7 @@ type AcquireOptions struct {
 // natively: a folder or .zip via --from, or a .zip fetched from --url (the "download my
 // own copy" path). ISO/7z stay "extract yourself, then --from".
 func Acquire(c *Conf, o AcquireOptions) error {
-	if !IsWindows() {
+	if IsLinux() {
 		args := []string{}
 		if o.URL != "" {
 			args = append(args, "--url", o.URL)

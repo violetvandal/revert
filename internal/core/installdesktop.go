@@ -13,8 +13,11 @@ import (
 // creates Start Menu (and Desktop) shortcuts to revert-gui.exe so the user can launch the
 // edition from the Start Menu instead of digging into the extracted folder.
 func InstallDesktop(c *Conf) error {
-	if !IsWindows() {
+	if IsLinux() {
 		return DelegateToBash(c.Root, "install-desktop")
+	}
+	if IsMac() {
+		return installDesktopMac(c)
 	}
 	return installShortcutsWindows(c)
 }

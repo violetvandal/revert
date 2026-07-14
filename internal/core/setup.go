@@ -18,7 +18,7 @@ type SetupOptions struct {
 // almost all of that collapses — THUG2 runs natively — so setup is minimal: ensure the
 // DirectX 9 runtime, import the controller bindings, and verify the user-supplied inputs.
 func Setup(c *Conf, o SetupOptions) error {
-	if !IsWindows() {
+	if IsLinux() {
 		args := []string{}
 		if o.OnlineOnly {
 			args = append(args, "--online-only")
@@ -26,6 +26,9 @@ func Setup(c *Conf, o SetupOptions) error {
 			args = append(args, "--online")
 		}
 		return DelegateToBash(c.Root, "setup", args...)
+	}
+	if IsMac() {
+		return setupMac(c, o)
 	}
 	return setupWindows(c, o)
 }

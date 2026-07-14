@@ -30,8 +30,11 @@ type Status struct {
 	Online   bool `json:"online"`
 }
 
-// ComputeStatus gathers the Windows-native lifecycle state.
+// ComputeStatus gathers the native lifecycle state (Windows or macOS).
 func ComputeStatus(c *Conf) Status {
+	if IsMac() {
+		return computeStatusMac(c)
+	}
 	return Status{
 		Wine:     true,             // native Windows: no Wine runtime needed
 		Setup:    pad0Configured(), // "setup done" = controller bound (DX9 is optional, not a gate)
@@ -53,8 +56,11 @@ func StatusJSON(c *Conf) {
 // dispatcher (whose doctor knows about Wine/prefixes/evdev); on Windows it reports the
 // native prerequisites.
 func Doctor(c *Conf) error {
-	if !IsWindows() {
+	if IsLinux() {
 		return DelegateToBash(c.Root, "doctor")
+	}
+	if IsMac() {
+		return doctorMac(c)
 	}
 	fmt.Println("[revert] Revert doctor (Windows) — checking prerequisites")
 

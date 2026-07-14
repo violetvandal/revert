@@ -32,9 +32,22 @@ thug2-linux-installer/
 # the blanket *.ico above drops it from a fresh clone and the packer builds unbranded exes.
 !tools/pack/icon/revert.ico
 
+# Same trap for the macOS lane: these two DLLs are OUR OWN build outputs (we patched DXVK
+# from source and wrote the dinput8 proxy), not game data, and `revert setup` on a Mac
+# installs them into the wine prefix. The blanket *.dll above would drop them from a fresh
+# clone and every Mac install would come up with no GPU d3d9 and an inverted left stick.
+!tools/dxvk-mac/d3d9-dxvk-patched-m1.dll
+!tools/mac-controller/dinput8.dll
+
+# And the DirectInput GUID probe. `revert calibrate-controller` shells out to it on every
+# platform and the Windows packer stages it, but *.exe above meant it was never actually in
+# the repo -- it only ever worked because an untracked copy happened to sit on the dev box.
+!tools/xinput-probe/dinput_probe_guid.exe
+
 # Logs & scratch
 *.log
 out/
+scratch-*/
 backups/
 **/*.orig
 
@@ -90,6 +103,9 @@ tools/prx/recompiler-grind/
 # GUI installer build output
 gui/revert-gui
 gui/dist/
+
+# macOS front door: the bash `revert` builds this on first use (bash can't run the Mac lane)
+/bin/
 
 # Windows bundle output (cross-compiled binaries + zip; rebuildable via tools/pack/)
 /dist/

@@ -1,0 +1,207 @@
+diff --git a/src/d3d9/d3d9_device.cpp b/src/d3d9/d3d9_device.cpp
+index 23b0a6f..4e9f102 100644
+--- a/src/d3d9/d3d9_device.cpp
++++ b/src/d3d9/d3d9_device.cpp
+@@ -3901,7 +3901,10 @@ namespace dxvk {
+ 
+ 
+   bool D3D9DeviceEx::SupportsSWVP() {
+-    return m_dxvkDevice->features().core.features.vertexPipelineStoresAndAtomics;
++    // VV patch: SWVP emulation needs geometry shaders; Apple Silicon (Metal) has none.
++    // Gate SWVP on geometryShader so we never build the GS path when it's unavailable.
++    return m_dxvkDevice->features().core.features.vertexPipelineStoresAndAtomics
++        && m_dxvkDevice->features().core.features.geometryShader;
+   }
+ 
+ 
+@@ -3914,8 +3917,9 @@ namespace dxvk {
+     DxvkDeviceFeatures supported = adapter->features();
+     DxvkDeviceFeatures enabled = {};
+ 
+-    // Geometry shaders are used for some meta ops
+-    enabled.core.features.geometryShader = VK_TRUE;
++    // Geometry shaders are used for some meta ops (SWVP emulation only).
++    // VV patch: request only if the device supports it (Apple Silicon/Metal lacks GS).
++    enabled.core.features.geometryShader = supported.core.features.geometryShader;
+     enabled.core.features.robustBufferAccess = VK_TRUE;
+     enabled.extRobustness2.robustBufferAccess2 = supported.extRobustness2.robustBufferAccess2;
+ 
+@@ -3944,7 +3948,8 @@ namespace dxvk {
+     enabled.core.features.sampleRateShading = VK_TRUE;
+     enabled.core.features.samplerAnisotropy = supported.core.features.samplerAnisotropy;
+     enabled.core.features.shaderClipDistance = VK_TRUE;
+-    enabled.core.features.shaderCullDistance = VK_TRUE;
++    // VV patch: cullDistance is absent on Apple Silicon/Metal; request only if supported.
++    enabled.core.features.shaderCullDistance = supported.core.features.shaderCullDistance;
+ 
+     // Ensure we support real BC formats and unofficial vendor ones.
+     enabled.core.features.textureCompressionBC = VK_TRUE;
+diff --git a/src/d3d9/d3d9_include.h b/src/d3d9/d3d9_include.h
+index 8762265..be47938 100644
+--- a/src/d3d9/d3d9_include.h
++++ b/src/d3d9/d3d9_include.h
+@@ -78,12 +78,8 @@
+ #endif
+ 
+ // MinGW headers are broken. Who'dve guessed?
++// VV patch: newer mingw-w64 now defines _D3DDEVINFO_RESOURCEMANAGER itself; don't redefine.
+ #ifndef _MSC_VER
+-typedef struct _D3DDEVINFO_RESOURCEMANAGER
+-{
+-  char dummy;
+-} D3DDEVINFO_RESOURCEMANAGER, * LPD3DDEVINFO_RESOURCEMANAGER;
+-
+ #ifndef __WINE__
+ extern "C" WINUSERAPI WINBOOL WINAPI SetProcessDPIAware(VOID);
+ #endif
+diff --git a/src/d3d9/d3d9_swapchain.cpp b/src/d3d9/d3d9_swapchain.cpp
+index 29e3b6e..b692810 100644
+--- a/src/d3d9/d3d9_swapchain.cpp
++++ b/src/d3d9/d3d9_swapchain.cpp
+@@ -132,38 +132,11 @@ namespace dxvk {
+ 
+     if (message == WM_DESTROY)
+       ResetWindowProc(window);
+-    else if (message == WM_ACTIVATEAPP) {
+-      D3DDEVICE_CREATION_PARAMETERS create_parms;
+-      windowData.swapchain->GetDevice()->GetCreationParameters(&create_parms);
+-
+-      if (!(create_parms.BehaviorFlags & D3DCREATE_NOWINDOWCHANGES)) {
+-        D3D9WindowMessageFilter filter(window);
+-        if (wparam && !windowData.activateProcessed) {
+-          // Heroes of Might and Magic V needs this to resume drawing after a focus loss
+-          D3DPRESENT_PARAMETERS params;
+-          RECT rect;
+-
+-          GetMonitorRect(GetDefaultMonitor(), &rect);
+-          windowData.swapchain->GetPresentParameters(&params);
+-          SetWindowPos(window, nullptr, rect.left, rect.top, params.BackBufferWidth, params.BackBufferHeight,
+-                       SWP_NOACTIVATE | SWP_NOZORDER);
+-          SetActivateProcessed(window, true);
+-        }
+-        else if (!wparam) {
+-          if (IsWindowVisible(window))
+-            ShowWindow(window, SW_MINIMIZE);
+-          SetActivateProcessed(window, false);
+-        }
+-      }
+-    }
+-    else if (message == WM_SIZE)
+-    {
+-      D3DDEVICE_CREATION_PARAMETERS create_parms;
+-      windowData.swapchain->GetDevice()->GetCreationParameters(&create_parms);
+-
+-      if (!(create_parms.BehaviorFlags & D3DCREATE_NOWINDOWCHANGES) && !IsIconic(window))
+-        PostMessageW(window, WM_ACTIVATEAPP, 1, GetCurrentThreadId());
+-    }
++    // VV patch: DO NOT do focus-based window management (minimize on WM_ACTIVATEAPP
++    // deactivation, reposition on activation, WM_SIZE->WM_ACTIVATEAPP). We always run
++    // windowed in a wine virtual desktop; on winemac a spurious focus-loss event was
++    // minimizing the game a couple seconds in and wedging its message loop ("freeze").
++    // Just pass every message through to the game's own window proc below.
+ 
+     return CallCharsetFunction(
+       CallWindowProcW, CallWindowProcA, unicode,
+@@ -196,6 +169,11 @@ namespace dxvk {
+     , m_dialog           (pDevice->GetOptions()->enableDialogMode) {
+     this->NormalizePresentParameters(pPresentParams);
+     m_presentParams = *pPresentParams;
++    // VV patch: force windowed presentation. macOS/winemac cannot do exclusive
++    // fullscreen display-mode changes (EnterFullscreenMode fails, game reverts to
++    // 640x480). Rendering windowed into the wine virtual desktop keeps the game's
++    // requested (widescreen) backbuffer resolution.
++    m_presentParams.Windowed = TRUE;
+     m_window = m_presentParams.hDeviceWindow;
+ 
+     UpdatePresentRegion(nullptr, nullptr);
+@@ -627,6 +605,9 @@ namespace dxvk {
+ 
+     this->SynchronizePresent();
+     this->NormalizePresentParameters(pPresentParams);
++    // VV patch: force windowed on reset too (see constructor) so exclusive-fullscreen
++    // display-mode changes (which fail on winemac) are never attempted.
++    pPresentParams->Windowed = TRUE;
+ 
+     m_dirty    |= m_presentParams.BackBufferFormat   != pPresentParams->BackBufferFormat
+                || m_presentParams.BackBufferCount    != pPresentParams->BackBufferCount;
+diff --git a/src/dxso/dxso_compiler.cpp b/src/dxso/dxso_compiler.cpp
+index 7cd6f72..d670098 100644
+--- a/src/dxso/dxso_compiler.cpp
++++ b/src/dxso/dxso_compiler.cpp
+@@ -832,16 +832,12 @@ namespace dxvk {
+       }
+     }
+     else {
+-      // Could be any of these!
+-      // We will check with the spec constant at sample time.
+-      for (uint32_t i = 0; i < SamplerTypeCount; i++) {
+-        auto samplerType = static_cast<DxsoSamplerType>(i);
+-
+-        DclSampler(idx, binding, samplerType, false, implicit);
+-
+-        if (samplerType != SamplerTypeTexture3D)
+-          DclSampler(idx, binding, samplerType, true, implicit);
+-      }
++      // VV patch: MoltenVK/Metal cannot compile the multi-type sampler MSL
++      // (it references undeclared s*_3d/_cube/_shadow samplers). Emit only the
++      // 2D sampler types; fixed-function/SM1 games like THUG2 sample 2D textures.
++      // NOTE: must stay in sync with the 2D-only sampling patch in emitTextureSample.
++      // Only the color 2D sampler; the depth/shadow path is disabled in SampleType.
++      DclSampler(idx, binding, SamplerTypeTexture2D, false, implicit);
+     }
+ 
+     DxsoSampler& sampler = m_samplers[idx];
+@@ -3053,9 +3049,10 @@ void DxsoCompiler::emitControlFlowGenericLoop(
+     };
+ 
+     auto SampleType = [&](DxsoSamplerType samplerType) {
+-      // Only do the check for depth comp. samplers
+-      // if we aren't a 3D texture
+-      if (samplerType != SamplerTypeTexture3D) {
++      // VV patch: never emit the depth-compare (shadow) sampler path. MoltenVK cannot
++      // declare a 2D-shadow sampler at the same binding as the 2D sampler, and
++      // THUG2-class fixed-function games don't use hardware depth-compare sampling.
++      if (false && samplerType != SamplerTypeTexture3D) {
+         uint32_t colorLabel  = m_module.allocateId();
+         uint32_t depthLabel  = m_module.allocateId();
+         uint32_t endLabel    = m_module.allocateId();
+@@ -3091,35 +3088,10 @@ void DxsoCompiler::emitControlFlowGenericLoop(
+       SampleType(samplerType);
+     }
+     else {
+-      std::array<SpirvSwitchCaseLabel, 3> typeCaseLabels = {{
+-        { uint32_t(SamplerTypeTexture2D),           m_module.allocateId() },
+-        { uint32_t(SamplerTypeTexture3D),           m_module.allocateId() },
+-        { uint32_t(SamplerTypeTextureCube),         m_module.allocateId() },
+-      }};
+-
+-      uint32_t switchEndLabel = m_module.allocateId();
+-
+-      uint32_t typeId = m_module.defIntType(32, 0);
+-
+-      uint32_t offset  = m_module.consti32(samplerIdx * 2);
+-      uint32_t bitCnt  = m_module.consti32(2);
+-      uint32_t type    = m_module.opBitFieldUExtract(typeId, m_ps.samplerTypeSpec, offset, bitCnt);
+-
+-      m_module.opSelectionMerge(switchEndLabel, spv::SelectionControlMaskNone);
+-      m_module.opSwitch(type,
+-        typeCaseLabels[uint32_t(SamplerTypeTexture2D)].labelId,
+-        typeCaseLabels.size(),
+-        typeCaseLabels.data());
+-
+-      for (const auto& label : typeCaseLabels) {
+-        m_module.opLabel(label.labelId);
+-
+-        SampleType(DxsoSamplerType(label.literal));
+-
+-        m_module.opBranch(switchEndLabel);
+-      }
+-
+-      m_module.opLabel(switchEndLabel);
++      // VV patch: force 2D sampling to match the 2D-only declaration patch above.
++      // Avoids the runtime type switch that referenced undeclared 3D/cube samplers,
++      // which MoltenVK could not translate to valid MSL.
++      SampleType(SamplerTypeTexture2D);
+     }
+   }
+ 

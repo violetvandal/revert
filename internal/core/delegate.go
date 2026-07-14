@@ -12,6 +12,14 @@ import (
 // is a thin pass-through, so the validated Wine path (share/setup + share/run) is the
 // single source of truth there and can never diverge from what this binary would do.
 func DelegateToBash(root, cmd string, args ...string) error {
+	// Backstop against an exec loop. On Darwin the bash `revert` immediately execs THIS
+	// binary, so delegating back to it would ping-pong forever. Every command is supposed
+	// to branch on IsLinux() before reaching here; if one ever forgets, fail loudly rather
+	// than fork-bomb the user's Mac.
+	if IsMac() {
+		return fmt.Errorf("internal: `%s` tried to delegate to the bash dispatcher on macOS, "+
+			"which delegates straight back — this command needs a native macOS branch", cmd)
+	}
 	bash := filepath.Join(root, "revert")
 	if !fileExists(bash) {
 		return fmt.Errorf("bash dispatcher not found at %s", bash)

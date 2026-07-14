@@ -338,13 +338,20 @@ EOF
 # ---- native PS2-style controller (main prefix) -------------------------------
 setup_controller() {  # $1 = prefix
   if (( IS_DECK )); then setup_controller_deck "$1"; return $?; fi
-  local ov="$CONTROLS_DIR/thug2-joystick-override.reg" st="$CONTROLS_DIR/thug2-settings.reg"
-  if [[ -f "$ov" && -f "$st" ]]; then
-    WINEPREFIX="$1" WINEDEBUG=-all "$GE_WINE" reg import "$ov" >/dev/null 2>&1 || warn "  override import failed"
+  # Import ONLY the button/axis map (gp0_/k0_). We no longer import the Wine
+  # "trigger-split override" key: it was named for one specific device ("Controller
+  # (XBOX 360 For Windows)"), so it never applied to other pads, and it is obsolete
+  # anyway — the triggers/bumpers are delivered by the evdev trigger bridge (their gp0_
+  # slots are left unbound), so Wine never needs to split them. Dropping it makes this
+  # step layout-agnostic: the same map serves any XInput-mode pad. (⚠️ validate on a
+  # real Xbox pad before a public release — proven on 8BitDo, reasoned for Xbox.)
+  local st="$CONTROLS_DIR/thug2-settings.reg"
+  if [[ -f "$st" ]]; then
     WINEPREFIX="$1" WINEDEBUG=-all "$GE_WINE" reg import "$st" >/dev/null 2>&1 || warn "  settings import failed"
-    log "  controller bindings + trigger-split override imported"
+    log "  controller bindings imported — works with any XInput-mode pad (Xbox, 8BitDo, ...)"
+    log "  another controller (e.g. a PlayStation pad in DInput mode)? bind it: revert configure-controller"
   else
-    warn "  controller .reg files missing in $CONTROLS_DIR"
+    warn "  controller binding .reg missing in $CONTROLS_DIR"
   fi
   # pad0 (which physical gamepad THUG2 binds to) is NOT set here — `revert run` detects
   # the live GUID via the padfix hook before each launch, so it always reflects the actual

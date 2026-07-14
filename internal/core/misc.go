@@ -20,7 +20,10 @@ func Tag(c *Conf, args []string) error {
 // dispatcher (which builds gui/revert-gui if needed, then launches it). On Windows the
 // bundle ships revert-gui.exe next to revert.exe — launch it directly.
 func LaunchGUI(c *Conf, args []string) error {
-	if !IsWindows() {
+	if IsMac() {
+		return runMacGUI(c, args)
+	}
+	if IsLinux() {
 		return DelegateToBash(c.Root, "gui", args...)
 	}
 	for _, p := range []string{
@@ -39,8 +42,8 @@ func LaunchGUI(c *Conf, args []string) error {
 // concerns; their Windows equivalents live elsewhere or aren't needed). `update` used to
 // live here too — it now has a native implementation in update.go.
 func DelegateOrUnsupported(c *Conf, cmd string, args []string) error {
-	if !IsWindows() {
+	if IsLinux() {
 		return DelegateToBash(c.Root, cmd, args...)
 	}
-	return fmt.Errorf("`%s` is not available on the native-Windows lane (%s)", cmd, runtime.GOOS)
+	return fmt.Errorf("`%s` is not available on the native lane (%s)", cmd, runtime.GOOS)
 }

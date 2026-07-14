@@ -110,8 +110,25 @@ THUG Pro, and removes the Go toolchain and system packages **only if Revert inst
 (a Go or a library you already had is left alone). A GUI **Uninstall** button offers the same
 two depths behind a typed confirmation.
 
+## Controllers
+Any pad in **XInput / "X" mode** works out of the box: setup imports a standard button map
+and the L2/R2 trigger bridge is layout-agnostic, so an Xbox pad, an 8BitDo, a DualSense in
+X mode, and most modern controllers all just work. Most controllers have a mode switch or a
+power-on button combo to select XInput.
+
+A pad that can't do XInput (a PlayStation controller left in DInput mode, an arcade stick, an
+oddball HID gamepad) has a different layout, so bind it yourself with THUG2's own config tool:
+
+```
+./revert configure-controller     # opens THUG2's Launcher; bind each control, Save, close
+```
+
+We ship no per-controller maps on purpose — this binds whatever pad Wine sees.
+
 ## Troubleshooting
 - `./revert doctor` first — it pinpoints missing deps/prefixes/inputs.
 - Controller has no L2/R2/walk: ensure `python3-evdev` + `/dev/uinput` access (doctor warns).
+- Controller not detected, or wrong buttons: put it in XInput mode, or run
+  `./revert configure-controller` to bind it (see Controllers above).
 - Black screen after a mod change: the boot-safety ceiling on `qb_scripts.prx` is enforced
   by the builder; if you hand-edit mods, rebuild with `./revert build --fast`.

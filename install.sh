@@ -39,6 +39,11 @@ ask()  { local a; printf '%s?%s %s ' "$p" "$o" "$1" >"$TTY"; read -r a <"$TTY" |
 
 is_deck() { [[ "${SteamDeck:-0}" == "1" ]] || grep -qiE 'jupiter|galileo' \
   /sys/devices/virtual/dmi/id/product_name 2>/dev/null; }
+is_mac()  { [[ "$(uname -s)" == "Darwin" ]]; }
+# Apple Silicon vs Intel. The lane is proven on Apple Silicon; Intel is expected to work
+# (the DXVK patch targets Metal, which has no geometry shaders on ANY Mac GPU, and Intel
+# skips Rosetta entirely) but is untested, so we say so rather than pretend either way.
+is_apple_silicon() { [[ "$(uname -m)" == "arm64" ]]; }
 
 # has_password — authoritative check: does the current account have a usable password?
 # `passwd -S` field 2 is P (usable) / NP (none) / L (locked). Reading the real state
@@ -111,7 +116,17 @@ cat <<'BANNER'
   └──────────────────────────────────────────────────┘
 BANNER
 printf '%s' "${o}"
-is_deck && info "Steam Deck detected." || info "Running on a Linux desktop."
+if is_mac; then
+  if is_apple_silicon; then
+    info "macOS on Apple Silicon detected."
+  else
+    info "macOS on an Intel Mac detected — supported (native x86, no Rosetta)."
+  fi
+elif is_deck; then
+  info "Steam Deck detected."
+else
+  info "Running on a Linux desktop."
+fi
 
 # ── 0. must have a real terminal ──────────────────────────────────────────────
 # Piping into bash (curl … | bash) makes the script itself bash's stdin, so the
@@ -129,13 +144,33 @@ fi
 
 # ── 1. git ───────────────────────────────────────────────────────────────────
 step "Checking for git"
-command -v git >/dev/null || die "git isn't installed. On the Steam Deck it's built in; \
-otherwise install 'git' with your package manager, then re-run this."
+if ! command -v git >/dev/null; then
+  is_mac && die "git isn't installed. Run 'xcode-select --install' to get Apple's command
+  line tools (which include git), then re-run this."
+  die "git isn't installed. On the Steam Deck it's built in; otherwise install 'git' with \
+your package manager, then re-run this."
+fi
+# On macOS /usr/bin/git is a STUB that only works once Apple's Command Line Tools are
+# installed. `command -v git` passes for the stub, but actually running git then errors
+# ("No developer tools were found") and pops a GUI dialog — which on a genuinely fresh Mac
+# used to surface only as a misleading "clone failed (network?)". Detect it up front (via
+# xcode-select, which never triggers the dialog) and kick off Apple's installer.
+if is_mac && ! xcode-select -p >/dev/null 2>&1; then
+  info "Apple's Command Line Tools (which include a working git) aren't installed — opening Apple's installer."
+  xcode-select --install >/dev/null 2>&1 || true
+  die "Click Install in the macOS \"Command Line Developer Tools\" dialog, let it finish, then run this installer again."
+fi
 ok "git present"
 
 # ── 2. account password (fresh SteamOS 'deck' user has none; setup needs sudo) ─
-step "Checking your account password"
-pwstat="$(passwd -S 2>/dev/null | awk 'NR==1{print $2}')"
+# macOS accounts always have a password, and `passwd -S` means something different there,
+# so this whole step is Linux-only.
+if is_mac; then
+  pwstat="P"
+else
+  step "Checking your account password"
+  pwstat="$(passwd -S 2>/dev/null | awk 'NR==1{print $2}')"
+fi
 if [[ "$pwstat" == "NP" || "$pwstat" == "L" ]]; then
   if [[ "$DRIVEN" == 1 ]]; then
     [[ -n "${REVERT_PASSWORD:-}" ]] || die "no password provided (setup needs one to install a few system libraries)."
@@ -156,7 +191,7 @@ Or set it yourself: open Konsole, run 'passwd' (use the SAME password you typed 
     ok "password set"
   fi
 else
-  ok "password is set"
+  is_mac || ok "password is set"
 fi
 
 # ── 3. Go (only needed to build; install locally, no admin) ───────────────────
@@ -168,7 +203,8 @@ elif [[ -x "$HOME/.local/go/bin/go" ]]; then
 else
   info "Go isn't installed — fetching it locally (one-time, no admin needed)."
   arch=amd64; case "$(uname -m)" in aarch64|arm64) arch=arm64;; esac
-  tgz="${GO_VER}.linux-${arch}.tar.gz"
+  goos=linux; is_mac && goos=darwin
+  tgz="${GO_VER}.${goos}-${arch}.tar.gz"
   mkdir -p "$HOME/.local"
   if command -v curl >/dev/null; then curl -fL "https://go.dev/dl/$tgz" -o "/tmp/$tgz" || die "Go download failed"
   else wget -O "/tmp/$tgz" "https://go.dev/dl/$tgz" || die "Go download failed"; fi
@@ -189,6 +225,14 @@ if [[ -d "$DEST/.git" ]]; then
   git -C "$DEST" submodule update --init --recursive || true
   ok "up to date: $DEST"
 else
+  # A non-empty destination that isn't a Revert clone. This is easy to hit on a Mac: the
+  # filesystem is case-INsensitive, so a user who keeps their game copy at ~/THUG2 already
+  # occupies ~/thug2. git's own error for this is cryptic, so say what's actually wrong.
+  if [[ -d "$DEST" ]] && [[ -n "$(ls -A "$DEST" 2>/dev/null)" ]]; then
+    die "$DEST already exists and isn't a Revert install.
+  (On a Mac, note that ~/THUG2 and ~/thug2 are the SAME folder — the filesystem ignores case.)
+  Move it aside, or install somewhere else:  REVERT_DIR=~/my-thug2 bash install.sh"
+  fi
   git clone --recursive "$REPO_URL" "$DEST" || die "clone failed (network?)"
   ok "installed to $DEST"
 fi
@@ -211,9 +255,15 @@ if ln -sf "$DEST/revert" "$HOME/.local/bin/revert" 2>/dev/null; then
   esac
 fi
 
-# ── 5. system setup (Wine, controller, Steam shortcut) ────────────────────────
-step "System setup — Wine, controller, Steam shortcut"
-info "This is the step that needs your password (to install a few 32-bit libraries)."
+# ── 5. system setup ───────────────────────────────────────────────────────────
+if is_mac; then
+  step "System setup — Wine, patched DXVK, controller, app bundles"
+  info "This downloads Wine (~176MB, checksum-verified) into the toolkit. No Homebrew and"
+  info "no admin needed — nothing is installed system-wide."
+else
+  step "System setup — Wine, controller, Steam shortcut"
+  info "This is the step that needs your password (to install a few 32-bit libraries)."
+fi
 ./revert setup || die "setup failed — see the messages above."
 
 # ── 6. game data — bring your own copy (paste a link) ─────────────────────────
@@ -249,6 +299,10 @@ fi
 printf '\n%s✓ All done!%s\n' "$g" "$o"
 if is_deck; then
   info "Switch to Gaming Mode and launch \"Tony Hawk's Underground 2 (VV Edition)\" from your library."
+elif is_mac; then
+  info "Play it:  open \"THUG2 Violet Vandal Edition\" from ~/Applications or Spotlight"
+  info "     or:  cd $DEST && ./revert run qol"
+  info "Controller: pair an Xbox pad in XInput mode (macOS only exposes Microsoft-VID pads to Wine)."
 else
   info "Play it:  cd $DEST && ./revert run qol      (or ./revert gui for a clickable menu)"
 fi

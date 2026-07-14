@@ -68,6 +68,22 @@ func dirExists(p string) bool {
 	return err == nil && fi.IsDir()
 }
 
-// IsWindows reports whether we're the native-Windows front door (vs. the Linux path
-// that delegates to the bash dispatcher).
+// The toolkit has three front doors, and every command picks one of them:
+//
+//	Windows — native. THUG2 runs directly, so the whole Wine layer evaporates.
+//	macOS   — native. THUG2 runs under Wine + our patched DXVK, but the bash dispatcher
+//	          is Linux-specific (GE-Proton, lutris paths, apt/pacman) and cannot even
+//	          find itself on a Mac (it needs GNU `readlink -f`), so the Go core owns it.
+//	Linux   — delegating. The proven bash path (share/*/*.sh) stays authoritative and
+//	          the Deck lane is never touched.
+//
+// IsLinux is the delegation predicate. Using it (rather than !IsWindows) is what keeps
+// macOS from falling through to bash, which would recurse: the bash `revert` execs the Go
+// binary on Darwin, and the Go binary would exec bash straight back.
 func IsWindows() bool { return runtime.GOOS == "windows" }
+func IsMac() bool     { return runtime.GOOS == "darwin" }
+func IsLinux() bool   { return runtime.GOOS == "linux" }
+
+// IsNative reports whether this platform implements commands in the Go core rather than
+// handing them to the bash dispatcher.
+func IsNative() bool { return IsWindows() || IsMac() }

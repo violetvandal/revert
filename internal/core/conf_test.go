@@ -134,3 +134,41 @@ UPDATE_REPO="someone/fork"`
 		t.Errorf("PRISTINE_DIR = %q, want .../game-pristine-us", got)
 	}
 }
+
+// A value with a trailing comment must parse as the value alone. revert.conf documents
+// itself inline, and the old parser only unquoted a value whose first AND last character
+// were quotes — so `LANE_QOL_SOUNDTRACK="original"  # default…` kept the whole comment as
+// its value and every lookup silently failed. This broke the soundtrack hook on both
+// native lanes; bash, sourcing the same file, was unaffected, which is why it hid so long.
+func TestConf_StripsInlineComments(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "revert.conf")
+	body := `LANE_QOL_SOUNDTRACK="original"               # default; override with --soundtrack radio
+GLYPH_STYLE=auto        # xbox | playstation | gamecube
+PLAIN="quoted value"
+BARE=nocomment
+HASH_IN_VALUE=https://example.com/x#frag
+SINGLE='single quoted'  # trailing
+EMPTY=""                # nothing here
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, err := LoadConf(path, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ key, want string }{
+		{"LANE_QOL_SOUNDTRACK", "original"},
+		{"GLYPH_STYLE", "auto"},
+		{"PLAIN", "quoted value"},
+		{"BARE", "nocomment"},
+		{"HASH_IN_VALUE", "https://example.com/x#frag"}, // a '#' inside a value is not a comment
+		{"SINGLE", "single quoted"},
+		{"EMPTY", ""},
+	} {
+		if got := c.Get(tc.key); got != tc.want {
+			t.Errorf("%s = %q, want %q", tc.key, got, tc.want)
+		}
+	}
+}

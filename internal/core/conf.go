@@ -76,7 +76,7 @@ func (c *Conf) parseFile(path string) error {
 			continue // if/fi/else/export/source/[[ ...
 		}
 		key := mt[1]
-		val := c.expand(stripQuotes(strings.TrimSpace(mt[2])))
+		val := c.expand(unquoteValue(mt[2]))
 		c.m[key] = val
 	}
 	return sc.Err()
@@ -150,12 +150,36 @@ func (c *Conf) expand(s string) string {
 	})
 }
 
-// stripQuotes removes a single matching pair of surrounding single/double quotes.
-func stripQuotes(s string) string {
-	if len(s) >= 2 {
-		if (s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'') {
-			return s[1 : len(s)-1]
+// unquoteValue turns a shell-style right-hand side into the value bash would see: quotes
+// removed, and any TRAILING COMMENT discarded.
+//
+// Discarding the comment is the whole point. revert.conf documents itself inline, e.g.
+//
+//	LANE_QOL_SOUNDTRACK="original"    # default; override with --soundtrack radio
+//
+// and the previous version only unquoted a value whose first AND last character were
+// quotes. Here the last character is part of the comment, so nothing was stripped and the
+// value became `"original"    # default; …` — every lookup of it silently failed. This bit
+// the soundtrack hook on BOTH native lanes (macOS and Windows), which fell back to
+// "skipped" on every launch. bash, which sources the same file, was of course fine.
+func unquoteValue(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	// Quoted: the value is everything up to the closing quote; the rest is a comment.
+	if q := s[0]; q == '"' || q == '\'' {
+		if end := strings.IndexByte(s[1:], q); end >= 0 {
+			return s[1 : 1+end]
+		}
+		return s[1:] // unterminated quote — take the remainder rather than lose the value
+	}
+	// Unquoted: a comment must be preceded by whitespace, so a value that merely CONTAINS
+	// a '#' (a URL fragment, a colour) survives intact.
+	if i := strings.IndexAny(s, " \t"); i >= 0 {
+		if j := strings.Index(s[i:], "#"); j >= 0 {
+			s = s[:i+j]
 		}
 	}
-	return s
+	return strings.TrimSpace(s)
 }

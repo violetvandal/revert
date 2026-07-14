@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include "../common/vv_hook.h"
 
 static const uint32_t VT_TEXTELEM = 0x0064a290;
 static const uint32_t ID_KBCURSTR = 0x6df45f28;
@@ -35,6 +36,35 @@ static bool safe_read(const void* addr, void* buf, size_t n) {
     SIZE_T got = 0;
     return ReadProcessMemory(GetCurrentProcess(), addr, buf, n, &got) && got == n;
 }
+
+// ---- the gate ----
+// text_field_active() below sweeps every committed read-write region of the address space. That
+// is not cheap, and the old code ran it every ~528ms FOREVER — at the main menu, mid-run, in a
+// level, always — burning ~12% of a core to keep re-answering "no, there is still no text field".
+//
+// So we gate it on VV_HOOK_SITE, the GetScreenElement-by-id resolver: when it hands back the
+// keyboard_current_string element, a text field just came up and it is worth sweeping. That makes
+// the common case near-free.
+//
+// ⚠️ BUT this feature already SHIPS and is user-validated (v1.2.6, Deck, 3 screen types), and the
+// assumption "keyboard_current_string is resolved through 0x4aae53" is NOT verified — it is the one
+// thing this change rests on that a playtest still has to confirm. So the gate is FAIL-SAFE: the
+// worker ALSO forces a sweep every few seconds regardless. If the hook fires as expected the gate
+// makes activation instant; if it somehow never fires for a given text screen, the forced sweep
+// still finds the field within a few seconds. Worst case is a slightly slower cursor, NEVER a dead
+// feature. Correctness must not depend on an unproven assumption about a working shipped mod.
+//
+// The sweep stays the ORACLE either way — the hook (and the forced tick) only decide WHEN to run
+// it; only the sweep confirms the element is still live on screen. Getting that wrong is not a perf
+// bug, it is the controller typing into the game while you skate.
+static volatile LONG g_gate = 0;    // the hook has seen keyboard_current_string since we last idled
+static bool g_hooked = false;       // did the hook install? (if not, we sweep every tick as before)
+
+extern "C" void kb_on_resolve(uint32_t* el) {
+    if (!el) return;
+    if (el[0] == VT_TEXTELEM && el[0x14/4] == ID_KBCURSTR) g_gate = 1;
+}
+VV_HOOK_DETOUR(kb_detour, kb_on_resolve)
 
 static bool text_field_active() {
     static unsigned char chunk[0x10000];              // reused 64 KB window (no per-scan malloc)
@@ -162,13 +192,28 @@ static DWORD WINAPI worker(LPVOID) {
         // when it goes away. Throttled (~0.5s) since the field-scan sweeps memory. A short
         // stability filter (present for 2 consecutive scans, ~1s) avoids the transient
         // keyboard_current_string elements that flicker in during menu loading.
-        static int streak = 0;
+        //
+        // Decide whether to sweep this tick (~528ms). Sweep if the gate is open (the hook saw a
+        // text element), OR the hook never installed (unknown exe → old always-sweep behaviour), OR
+        // it has been a few seconds since the last sweep. That last clause is the fail-safe: it
+        // bounds how long a text field can be up before we notice it, so the feature keeps working
+        // even if the hook assumption is wrong — see the gate comment above.
+        static int streak = 0, since = 0;
         if (++scanctr >= 16) {
             scanctr = 0;
-            bool present = text_field_active();
-            streak = present ? streak + 1 : 0;
-            if (streak >= 2 && !g_active) { g_active = true; g_cand = 0; g_shown = false; lg("[kbentry] AUTO ON\n"); }
-            else if (!present && g_active) { g_active = false; g_cand = 0; g_shown = false; lg("[kbentry] AUTO OFF\n"); }
+            bool forced = (++since >= 6);   // ~every 3.2s (6 * 528ms), independent of the hook
+            bool gate = (!g_hooked) || (g_gate != 0) || forced;
+            if (gate) {                     // NB: only the SWEEP is gated; the input handling below
+                since = 0;                  // always runs, so an active field is never starved
+                bool present = text_field_active();
+                streak = present ? streak + 1 : 0;
+                if (streak >= 2 && !g_active) { g_active = true; g_cand = 0; g_shown = false; lg("[kbentry] AUTO ON\n"); }
+                else if (!present) {
+                    if (g_active) { g_active = false; g_cand = 0; g_shown = false; lg("[kbentry] AUTO OFF\n"); }
+                    g_gate = 0;   // field gone: back to the gated cadence until the hook or the
+                                  // forced tick reopens it
+                }
+            }
         }
 
         // read DInput pad
@@ -202,6 +247,11 @@ BOOL APIENTRY DllMain(HMODULE h, DWORD r, LPVOID) {
     g_hinst = (HINSTANCE)h;
     DisableThreadLibraryCalls(h);
     lg("[kbentry] loaded pid=%lu\n", (long)GetCurrentProcessId());
+    // Cold, before any game thread runs. Chains automatically if VV.HudFix already hooked the
+    // same site (or gets chained onto if it loads after us) — see ../common/vv_hook.h.
+    g_hooked = vv_install_hook((void*)&kb_detour);
+    lg(g_hooked ? "[kbentry] hook installed (scan gated on it)\n"
+                : "[kbentry] hook NOT installed — falling back to always scanning\n");
     CreateThread(0, 0, worker, 0, 0, 0);
     return TRUE;
 }
