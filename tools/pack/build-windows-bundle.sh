@@ -115,6 +115,12 @@ mkdir -p "$STAGE/docs"
 for d in ARCHITECTURE INSTALL BUILD-CONTENTS; do stage_file "docs/$d.md"; done
 stage_file README-WINDOWS.txt
 
+# The bundle redistributes third-party components (ThirteenAG's WidescreenFixesPack and the
+# Ultimate ASI Loader), so their attribution has to travel *with the bundle*, not just sit
+# in the repo. Ship LICENSE alongside it so our own MIT grant is in the box too.
+stage_file LICENSE
+stage_file THIRD-PARTY-NOTICES.md
+
 # ── zip it ──────────────────────────────────────────────────────────────────────
 log "zipping -> $ZIP"
 rm -f "$ZIP" "$ZIP.sha256"
