@@ -1,8 +1,8 @@
 # Revert — THUG2: Violet Vandal Edition toolkit
 
 **Revert** builds and runs the *definitive, modernized Tony Hawk's Underground 2* on
-Linux / Steam Deck (Windows via the cross-platform core). It ships **tooling, never
-game data** — you bring your own THUG2 copy.
+**Linux / Steam Deck, Windows, and macOS**. It ships **tooling, never game data**, so you
+bring your own THUG2 copy.
 
 One front door, three lanes:
 
@@ -13,13 +13,13 @@ One front door, three lanes:
 | **Online** | THUG Pro (bundled optional companion, isolated prefix) |
 
 ## Install (one command)
-On a **Steam Deck** or any Linux desktop (Fedora, Arch, Ubuntu…), paste this into a
-terminal:
+On a **Steam Deck**, any **Linux** desktop (Fedora, Arch, Ubuntu…), or a **Mac**, paste
+this into a terminal:
 ```sh
 bash <(curl -fsSL https://raw.githubusercontent.com/violetvandal/revert/main/install.sh)
 ```
 That's the whole install. It fetches the toolkit (+ submodules), installs the Go build
-tool locally if missing, runs system setup (Wine, controller, and — on a Deck — a Steam
+tool locally if missing, runs system setup (Wine, controller, and on a Deck a Steam
 shortcut), downloads *your* THUG2 copy from a link you paste, and builds the edition.
 On a fresh Steam Deck the result is **turnkey**: it lands in your library and plays with
 widescreen + analog controller, no manual steps. See [docs/STEAMDECK.md](docs/STEAMDECK.md).
@@ -36,10 +36,42 @@ wizard does everything the command above does, with a live progress log. It asks
 three things (where to install, your account password, and a link/folder for your THUG2
 copy), then sets up Wine, fetches your game, and builds the edition. On a fresh Steam Deck
 it even sets your account password for you and handles the one `sudo` step with no
-terminal. Grab `revert-installer-linux-amd64` from the
-[latest release](https://github.com/violetvandal/revert/releases/latest), mark it
-executable (right-click → *Properties → Permissions → Is executable*, or `chmod +x`), and
-double-click it.
+terminal. Grab the installer for your machine from the
+[latest release](https://github.com/violetvandal/revert/releases/latest):
+
+| Machine | Download |
+|---------|----------|
+| Linux / Steam Deck | `revert-installer-linux-amd64` |
+| Mac (Apple Silicon) | `revert-installer-darwin-arm64` |
+| Mac (Intel) | `revert-installer-darwin-amd64` |
+| Windows | `revert-windows-amd64.zip`, then run `revert-gui.exe` |
+
+On Linux, mark it executable (right-click → *Properties → Permissions → Is executable*, or
+`chmod +x`) and double-click it. On a Mac, see the Gatekeeper note below.
+
+### On a Mac
+Both **Apple Silicon** (M1 and later) and **Intel** Macs are supported, with the same
+one-command install above. THUG2 is a 32-bit Direct3D 9 game from 2004, so Revert runs it
+under Wine and translates its graphics to Metal through a build of DXVK we patched
+specifically for Macs, whose Metal backend has no geometry shaders. The result is
+GPU-accelerated, not a software-rendered slideshow.
+
+The install needs **no Homebrew and no admin password**. It downloads a checksum-verified
+Wine into the toolkit folder and installs nothing system-wide. macOS will ask you to
+install Apple's Command Line Tools if you don't already have them, which is a normal
+system dialog and the installer waits for it.
+
+When it finishes, launch **"THUG2 Violet Vandal Edition"** from `~/Applications` or
+Spotlight, like any other app, or run `revert run qol`.
+
+For a controller, pair an **Xbox pad in XInput mode**. macOS only exposes
+Microsoft-vendor pads to Wine, so other brands will pair with macOS but stay invisible to
+the game.
+
+> If you download the graphical installer from the releases page instead of using the
+> one-line command, macOS will quarantine it because it is unsigned. Right-click the file
+> and choose *Open*, then confirm, which tells Gatekeeper you trust it. The one-line
+> install above is not affected.
 
 ## Quick start (already cloned)
 If you cloned the repo yourself (`git clone --recursive`), drive the lifecycle directly:
@@ -94,3 +126,9 @@ See [docs/INSTALL.md](docs/INSTALL.md) for the full setup,
 > Revert never ships THUG2 game files, no-CD executables, or licensed/derivative
 > packs. You must own the game; some optional content (HQ A/V, brand decks) is
 > user-supplied. See [docs/INSTALL.md](docs/INSTALL.md).
+
+## License
+Revert is MIT licensed (see [LICENSE](LICENSE)). It redistributes a few third-party
+components under their own licenses, including a **modified** build of DXVK (zlib) for the
+macOS lane, and ThirteenAG's WidescreenFixesPack and Ultimate ASI Loader (MIT). They are
+credited in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

@@ -3,12 +3,16 @@
 Revert ships **tooling, not game data**. You must own Tony Hawk's Underground 2 (PC).
 Some optional enhancements are user-supplied (see below).
 
-> **Just want the easy path?** Download the graphical installer
-> ([`revert-installer-linux-amd64`](https://github.com/violetvandal/revert/releases/latest))
-> or run the one-command bootstrap (`bash <(curl -fsSL …/install.sh)`) — both do everything
-> below for you. This document is the **manual / CLI** reference for driving each step yourself.
+> **Just want the easy path?** Run the one-command bootstrap
+> (`bash <(curl -fsSL …/install.sh)`), which works on Linux, the Steam Deck, and macOS, or
+> download the graphical installer for your machine from the
+> [latest release](https://github.com/violetvandal/revert/releases/latest). Both do
+> everything below for you. This document is the **manual / CLI** reference for driving each
+> step yourself.
 
 ## Prerequisites
+
+### Linux / Steam Deck
 - Linux (Fedora is the tested/flagship target; other distros: install the equivalents).
 - A **GE-Proton / wine-ge** runner (via Lutris or ProtonUp-Qt). System Fedora wine is
   wow64-only and cannot host the win32 prefix THUG2 needs. Point `GE_DIR` in
@@ -18,7 +22,30 @@ Some optional enhancements are user-supplied (see below).
 - A Go toolchain (only to build `tools/thugkit/thugkit` from source; shipped builds
   carry a prebuilt binary).
 
-Run `./revert doctor` at any time — it reports exactly what's present and what's next.
+### macOS
+Apple Silicon (M1 and later) and Intel Macs are both supported.
+- **No Homebrew and no admin password.** `revert setup` downloads a checksum-verified Wine
+  into the toolkit folder. Nothing is installed system-wide.
+- **Apple's Command Line Tools.** macOS ships a stub `/usr/bin/git` that looks installed but
+  fails on use. The installer detects this and opens Apple's dialog for you. If you are
+  driving things by hand, run `xcode-select --install` first.
+- **Graphics.** THUG2 is a 32-bit Direct3D 9 game and Metal has no geometry shaders, so
+  Revert ships a build of DXVK patched to work around that (see
+  [`tools/dxvk-mac/`](../tools/dxvk-mac/)). This is what makes the game GPU-accelerated
+  rather than a software-rendered slideshow, and it is set up for you.
+- **Controller:** an Xbox pad in **XInput mode**. macOS only exposes Microsoft-vendor pads
+  to Wine, so other brands pair with macOS but stay invisible to the game.
+
+`revert setup` writes a **"THUG2 Violet Vandal Edition"** app bundle into `~/Applications`,
+so you can launch from Spotlight like any other Mac app.
+
+### Windows
+Runs natively, with no Wine at all. Download `revert-windows-amd64.zip` from the
+[latest release](https://github.com/violetvandal/revert/releases/latest), unzip it, and run
+`revert-gui.exe`. The binaries are unsigned, so SmartScreen may warn once: choose *More
+info*, then *Run anyway*.
+
+Run `./revert doctor` at any time. It reports exactly what's present and what's next.
 
 ## 1. System setup (once)
 ```sh
