@@ -13,12 +13,16 @@ Some optional enhancements are user-supplied (see below).
 ## Prerequisites
 
 ### Linux / Steam Deck
-- Linux (Fedora is the tested/flagship target; other distros: install the equivalents).
+- Linux. `revert setup` installs the system packages automatically on Fedora (dnf),
+  Debian/Ubuntu (apt, enabling i386 multiarch for you), and Steam Deck/Arch (pacman).
+  Fedora and the Steam Deck are the most-tested targets.
 - A **GE-Proton / wine-ge** runner (via Lutris or ProtonUp-Qt). System Fedora wine is
   wow64-only and cannot host the win32 prefix THUG2 needs. Point `GE_DIR` in
-  `revert.conf` at it.
-- Packages: `winetricks p7zip p7zip-plugins msitools cabextract python3-evdev`
-  (`revert setup` installs these on Fedora).
+  `revert.conf` at it. On a fresh box without a runner, `revert setup` downloads a
+  known-good Wine (Kron4ek 11.11) for you.
+- Packages: `winetricks p7zip msitools cabextract python3-evdev`, numpy + Pillow, and
+  the 32-bit X / SDL2 / Vulkan / udev libraries (`revert setup` installs the right names
+  for your package manager; the 32-bit udev is what makes controllers work under Wine).
 - A Go toolchain (only to build `tools/thugkit/thugkit` from source; shipped builds
   carry a prebuilt binary).
 

@@ -116,10 +116,48 @@ install_packages_deck() {
   fi
 }
 
+# Debian/Ubuntu (apt). Unlike Fedora/Arch — whose multilib ships the 32-bit userland
+# already — a stock Debian/Ubuntu is amd64-only, so we must (1) enable the i386
+# architecture and (2) install the 32-bit X/SDL/Vulkan libs by hand, or THUG2's win32
+# Wine prefix can't even create a window (nodrv_CreateWindow) and DXVK's 32-bit d3d9 has
+# no Vulkan loader. The tooling packages (winetricks/7z/msitools/…) mirror the dnf set.
+install_packages_apt() {
+  # i386 multiarch — the prerequisite for every :i386 package below.
+  if ! dpkg --print-foreign-architectures 2>/dev/null | grep -qx i386; then
+    log "enabling i386 multiarch (sudo; required for 32-bit Wine)"
+    ask_sudo dpkg --add-architecture i386 || warn "  dpkg --add-architecture i386 failed"
+    ask_sudo apt-get update || warn "  apt-get update failed"
+  fi
+  local pkgs=(
+    winetricks p7zip-full msitools cabextract python3-evdev
+    # numpy + Pillow: the build's CAS asset post-pass (custom stickers / texture recolour)
+    # imports them via png2img; without them that step throws instead of applying.
+    python3-numpy python3-pil
+    # 32-bit X libs — without these the win32 prefix fails at nodrv_CreateWindow.
+    libxrender1:i386 libxcursor1:i386 libxi6:i386 libxrandr2:i386
+    libxcomposite1:i386 libxkbcommon0:i386
+    # 32-bit SDL2 (winebus gamepad enumeration) + Vulkan (DXVK d3d9).
+    libsdl2-2.0-0:i386 libvulkan1:i386 mesa-vulkan-drivers:i386
+    # 32-bit libudev — REQUIRED for gamepad/controller detection. Without it Wine's 32-bit
+    # winebus/wineusb fails to init its Unix backend (STATUS_DLL_NOT_FOUND) and enumerates NO
+    # input devices, so no controller is ever seen. Fedora/Arch multilib ship it implicitly;
+    # a stock Ubuntu does not.
+    libudev1:i386
+  )
+  local new=() p
+  for p in "${pkgs[@]}"; do
+    dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || new+=("$p")
+  done
+  log "installing system packages (sudo)"
+  ask_sudo apt-get install -y "${pkgs[@]}" || warn "apt-get install had issues — see above"
+  record_packages apt "${new[@]}"
+}
+
 install_packages() {
   if (( IS_DECK )); then install_packages_deck; return $?; fi
-  command -v dnf >/dev/null || { warn "non-Fedora system: install equivalents of winetricks p7zip msitools cabextract python3-evdev yourself"; return 0; }
-  local pkgs=(winetricks p7zip p7zip-plugins msitools cabextract python3-evdev)
+  if command -v apt-get >/dev/null; then install_packages_apt; return $?; fi
+  command -v dnf >/dev/null || { warn "unrecognized package manager: install equivalents of winetricks p7zip msitools cabextract python3-evdev + the 32-bit X/SDL/Vulkan libs yourself"; return 0; }
+  local pkgs=(winetricks p7zip p7zip-plugins msitools cabextract python3-evdev python3-numpy python3-pillow)
   local new=() p
   for p in "${pkgs[@]}"; do rpm -q "$p" >/dev/null 2>&1 || new+=("$p"); done
   log "installing system packages (sudo)"
@@ -133,7 +171,11 @@ check_ge() {
     log "wine runtime: $GE_DIR"
     return 0
   fi
-  if (( IS_DECK )); then
+  # Auto-provision Kron4ek wine 11.11 whenever GE_DIR targets that build and it's absent —
+  # on the Deck, and now on any fresh Linux box (Ubuntu, etc.) whose revert.conf fell back
+  # to the Kron4ek dir because no wine-ge-8-26 was present. The 11.11 build is glibc-current
+  # and works on any modern desktop, so this is safe off-Deck too.
+  if (( IS_DECK )) || [[ "$(basename "$GE_DIR")" == "wine-11.11-staging-amd64" ]]; then
     # Install Kron4ek wine 11.11 (GE_DIR should point at .../wine-11.11-staging-amd64).
     # Prefer the bundled archive shipped by sync-to-deck.sh (offline / no URL-rot);
     # fall back to downloading from WINE_DECK_URL.
@@ -357,11 +399,34 @@ setup_controller() {  # $1 = prefix
   # the live GUID via the padfix hook before each launch, so it always reflects the actual
   # SDL-assigned guidInstance even across Wine updates or prefix rebuilds.
   [[ -f "$TRIGGER_BRIDGE" ]] || warn "  trigger-bridge script missing ($TRIGGER_BRIDGE)"
-  if [[ ! -w /dev/uinput ]]; then
-    warn "  /dev/uinput not writable — the L2/R2 trigger bridge needs it. To grant access:
-    sudo groupadd -f input && sudo usermod -aG input \"$USER\"
-    echo 'KERNEL==\"uinput\", GROUP=\"input\", MODE=\"0660\"' | sudo tee /etc/udev/rules.d/99-uinput.rules
-    sudo udevadm control --reload-rules && sudo udevadm trigger   (then re-login)"
+  grant_uinput_access
+}
+
+# The L2/R2 trigger bridge (and the Deck pad-mirror) write to /dev/uinput, which is root-only
+# by default. Rather than print a wall of commands for the user to run, set it up FOR them:
+# a persistent udev rule + the input group, PLUS an immediate ACL so it works this session
+# without a re-login. Idempotent; no-op if already writable.
+grant_uinput_access() {
+  [[ -w /dev/uinput ]] && { log "  /dev/uinput already writable (trigger bridge ready)"; return 0; }
+  log "  granting /dev/uinput access for the controller trigger bridge (sudo)"
+  ask_sudo groupadd -f input || true
+  ask_sudo usermod -aG input "$USER" || true
+  printf 'KERNEL=="uinput", GROUP="input", MODE="0660"\n' \
+    | ask_sudo tee /etc/udev/rules.d/99-uinput.rules >/dev/null || true
+  ask_sudo udevadm control --reload-rules >/dev/null 2>&1 || true
+  ask_sudo udevadm trigger >/dev/null 2>&1 || true
+  # Immediate access this session (group change alone needs a re-login): prefer an ACL,
+  # fall back to group-owning the node now.
+  if command -v setfacl >/dev/null; then
+    ask_sudo setfacl -m "u:${USER}:rw" /dev/uinput >/dev/null 2>&1 || true
+  else
+    ask_sudo chgrp input /dev/uinput >/dev/null 2>&1 || true
+    ask_sudo chmod 660 /dev/uinput >/dev/null 2>&1 || true
+  fi
+  if [[ -w /dev/uinput ]]; then
+    log "  /dev/uinput ready (controller triggers will work now + persist across reboots)"
+  else
+    warn "  couldn't grant /dev/uinput access automatically — L2/R2 triggers may be unavailable until you re-login"
   fi
 }
 

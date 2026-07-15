@@ -66,18 +66,24 @@ ask_sudo() {
 purge_packages() {
   local manifest="$REVERT_ROOT/.revert-packages"
   [[ -f "$manifest" ]] || return 0
-  local -a dnf_pkgs=() pacman_pkgs=()
+  local -a dnf_pkgs=() pacman_pkgs=() apt_pkgs=()
   local mgr pkg
   while read -r mgr pkg; do
     [[ -n "$mgr" && -n "$pkg" ]] || continue
     case "$mgr" in
       dnf)    dnf_pkgs+=("$pkg");;
       pacman) pacman_pkgs+=("$pkg");;
+      apt)    apt_pkgs+=("$pkg");;
     esac
   done < "$manifest"
   if (( ${#dnf_pkgs[@]} )) && command -v dnf >/dev/null; then
     log "removing ${#dnf_pkgs[@]} dnf package(s) Revert installed (sudo)"
     ask_sudo dnf remove -y "${dnf_pkgs[@]}" && gone "dnf packages: ${dnf_pkgs[*]}" \
+      || warn "some packages were kept (another app needs them) — that's fine"
+  fi
+  if (( ${#apt_pkgs[@]} )) && command -v apt-get >/dev/null; then
+    log "removing ${#apt_pkgs[@]} apt package(s) Revert installed (sudo)"
+    ask_sudo apt-get remove -y "${apt_pkgs[@]}" && gone "apt packages: ${apt_pkgs[*]}" \
       || warn "some packages were kept (another app needs them) — that's fine"
   fi
   if (( ${#pacman_pkgs[@]} )) && command -v pacman >/dev/null; then
@@ -96,9 +102,11 @@ within() {
 
 # ── build the allowlist of absolute paths outside the clone we may remove ───────
 ALLOW=("$HOME/.local/bin/revert" "$PREFIX_MAIN" "$PREFIX_ONLINE")
-# The Deck-installed Wine ONLY. On the desktop GE_DIR points at wine-ge-8-26, which Revert
-# did not install (setup only checks for it) — never remove that.
-if (( IS_DECK )) && [[ "$GE_DIR" == *"/wine-11.11-staging-amd64" ]]; then
+# Revert-installed Wine ONLY: the Kron4ek 11.11 build check_ge auto-downloads (on the Deck,
+# and on any fresh Linux box whose revert.conf fell back to it). That exact dir name is only
+# ever placed there by our download, so it's safe to remove. A user's own wine-ge-8-26
+# (which setup only checks for, never installs) never matches — never remove that.
+if [[ "$GE_DIR" == *"/wine-11.11-staging-amd64" ]]; then
   ALLOW+=("$GE_DIR")
 fi
 ALLOW+=("$HOME/.local/share/applications/thug2-violet-vandal.desktop")
@@ -159,7 +167,7 @@ if (( ! PURGE )); then
   [[ -f "$REVERT_ROOT/.revert-packages" ]] && KEEPS+=("system packages Revert installed — shared with other apps; --purge removes them")
   [[ -d "$REVERT_ROOT/game-thugpro" ]] && KEEPS+=("THUG Pro (game-thugpro/) — a separate community app; --purge removes it")
 fi
-KEEPS+=("system libraries installed with your package manager (dnf/pacman) and /dev/uinput access")
+KEEPS+=("system libraries installed with your package manager (dnf/apt/pacman) and /dev/uinput access")
 KEEPS+=("your Steam Deck account password")
 
 # ── the plan output ────────────────────────────────────────────────────────────

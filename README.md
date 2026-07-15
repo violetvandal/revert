@@ -9,7 +9,7 @@ One front door, three lanes:
 | Lane | What |
 |------|------|
 | **Vanilla** | clean THUG2 + no-CD + widescreen + controller |
-| **QOL-Modded** *(flagship)* | the curated mod suite (MOD OPTIONS / LEVEL MODS, HUD fix, HQ A/V, custom tags…) — every mod default-off, vanilla one click away |
+| **QOL-Modded** *(flagship)* | the curated mod suite (MOD OPTIONS / LEVEL MODS, HUD fix, HQ A/V, custom tags…) plus **Violet Vandal**, the edition's namesake, as a selectable roster skater — every toggle default-off, vanilla one click away |
 | **Online** | THUG Pro (bundled optional companion, isolated prefix) |
 
 ## Install (one command)

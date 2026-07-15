@@ -83,8 +83,8 @@ from_folder() {
 
 # ---- ISO source (3-disc msiextract recipe) ------------------------------------
 from_isos() {
-  command -v 7z >/dev/null    || err "7z required for ISO extraction (dnf install p7zip p7zip-plugins)"
-  command -v msiextract >/dev/null || err "msiextract required (dnf install msitools)"
+  command -v 7z >/dev/null    || err "7z required for ISO extraction (dnf install p7zip p7zip-plugins / apt install p7zip-full)"
+  command -v msiextract >/dev/null || err "msiextract required (dnf install msitools / apt install msitools)"
   local work; work="$(mktemp -d)"; trap 'rm -rf "$work"' RETURN
   local i=0
   for iso in "${ISOS[@]}"; do
@@ -183,7 +183,7 @@ from_url() {
     *.tar|*.tar.gz|*.tgz|*.tar.xz|*.tar.bz2)
       log "extracting tarball ..."; tar -xf "$dl" -C "$x" || err "tar extract failed";;
     *.zip|*.7z|*.rar|*.001)
-      command -v 7z >/dev/null || err "7z required to extract $name (dnf install p7zip p7zip-plugins)"
+      command -v 7z >/dev/null || err "7z required to extract $name (dnf install p7zip p7zip-plugins / apt install p7zip-full)"
       log "extracting archive ..."; 7z x -y -o"$x" "$dl" >/dev/null || err "7z extract failed";;
     *)
       command -v 7z >/dev/null && 7z x -y -o"$x" "$dl" >/dev/null 2>&1 \

@@ -123,7 +123,11 @@ cmd_doctor() {
 # the archive extraction (7z) + the optional Python CAS asset post-pass. Supersedes
 # rebuild-playable.sh (kept as share/legacy reference).
 ensure_thugkit() {
-  [[ -x "$THUGKIT" ]] && "$THUGKIT" 2>&1 | grep -q build && return 0
+  # thugkit with no args prints usage (containing "build") then exits non-zero; under
+  # `set -o pipefail` a bare `thugkit | grep` would surface that non-zero and wrongly
+  # judge the binary absent — `|| true` keeps only grep's status. (Without this, a box
+  # with a prebuilt binary but no Go toolchain fails the build for no reason.)
+  [[ -x "$THUGKIT" ]] && { "$THUGKIT" 2>&1 || true; } | grep -q build && return 0
   command -v go >/dev/null || err "no thugkit binary with 'build', and no go toolchain to build it"
   log "building thugkit (Go core)"
   ( cd "$(dirname "$THUGKIT")" && go build -o "$(basename "$THUGKIT")" ./cmd/thugkit ) || err "thugkit build failed"
@@ -135,6 +139,14 @@ ensure_thugkit() {
 cas_post_pass() {  # $1 = edition dir
   local dir="$1" save="${REVERT_ROOT}/tools/save"
   command -v python3 >/dev/null || { note "python3 absent — skipping CAS asset post-pass"; return 0; }
+  # These steps import numpy + Pillow (via png2img). If they're missing, skip cleanly with a
+  # one-line note instead of letting each script spew a ModuleNotFoundError traceback — the
+  # CAS post-pass is cosmetic and never required for a bootable build. (revert setup installs
+  # them; this guards a partial/skipped setup.)
+  if ! python3 -c 'import numpy, PIL' 2>/dev/null; then
+    note "python numpy/Pillow missing — skipping CAS sticker/recolour pass (install: revert setup, or 'pip install numpy pillow')"
+    return 0
+  fi
   log "CAS asset post-pass (python)"
   python3 "$save/apply_panty_color.py" "$dir" 130 50 190 || true
   [[ -d "$DECKS_BLOB" ]]  && python3 "$save/apply_deck_pack.py" "$dir" "$DECKS_BLOB" || true
@@ -284,7 +296,7 @@ cmd_status() {
   local wine=false setup=false thugkit=false pristine=false build=false online=false
   [[ -x "$GE_DIR/bin/wine" ]]                    && wine=true
   [[ -d "$PREFIX_MAIN" ]]                        && setup=true
-  [[ -x "$THUGKIT" ]] && "$THUGKIT" 2>&1 | grep -q build && thugkit=true
+  [[ -x "$THUGKIT" ]] && { "$THUGKIT" 2>&1 || true; } | grep -q build && thugkit=true   # || true: pipefail-safe (thugkit usage exits non-zero)
   [[ -d "$PRISTINE_DIR/Data/pre" ]]              && pristine=true
   [[ -d "$EDITION_QOL/Data/pre" ]]               && build=true
   # "online" = THUG Pro actually installed (its launcher exists), matching the Windows

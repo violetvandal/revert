@@ -37,6 +37,30 @@ warn() { printf '  %s!%s %s\n' "$y" "$o" "$*"; }
 die()  { printf '\n%s✗ %s%s\n' "$r" "$*" "$o" >&2; exit 1; }
 ask()  { local a; printf '%s?%s %s ' "$p" "$o" "$1" >"$TTY"; read -r a <"$TTY" || a=""; printf '%s' "$a"; }
 
+# offer_pkg_install CMD [PKG] — a prerequisite command is missing; install it FOR the user
+# via their package manager rather than telling them to do it themselves. PKG defaults to
+# CMD. Honors the GUI's non-interactive mode (DRIVEN) and its SUDO_ASKPASS helper. Returns
+# 0 only if CMD is runnable afterward. Deck (pacman, read-only rootfs) is handled too.
+offer_pkg_install() {
+  local cmd="$1" pkg="${2:-$1}" inst="" upd=""
+  if   command -v apt-get >/dev/null; then upd="apt-get update"; inst="apt-get install -y $pkg"
+  elif command -v dnf     >/dev/null; then inst="dnf install -y $pkg"
+  elif command -v pacman  >/dev/null; then inst="pacman -S --needed --noconfirm $pkg"
+  else return 1; fi
+  if [[ "$DRIVEN" == 1 ]]; then
+    info "$cmd is missing — installing it for you."
+  else
+    local a; a="$(ask "$cmd is required but not installed. Install it now (needs your password)? [Y/n]:")"
+    case "$a" in [Nn]*) return 1;; esac
+  fi
+  local S=(sudo); [[ -n "${SUDO_ASKPASS:-}" ]] && S=(sudo -A)
+  command -v pacman >/dev/null && is_deck && { "${S[@]}" steamos-readonly disable >/dev/null 2>&1 || true; }
+  [[ -n "$upd" ]] && { "${S[@]}" $upd >/dev/null 2>&1 || true; }
+  # shellcheck disable=SC2086
+  "${S[@]}" $inst || return 1
+  command -v "$cmd" >/dev/null
+}
+
 is_deck() { [[ "${SteamDeck:-0}" == "1" ]] || grep -qiE 'jupiter|galileo' \
   /sys/devices/virtual/dmi/id/product_name 2>/dev/null; }
 is_mac()  { [[ "$(uname -s)" == "Darwin" ]]; }
@@ -147,8 +171,15 @@ step "Checking for git"
 if ! command -v git >/dev/null; then
   is_mac && die "git isn't installed. Run 'xcode-select --install' to get Apple's command
   line tools (which include git), then re-run this."
-  die "git isn't installed. On the Steam Deck it's built in; otherwise install 'git' with \
-your package manager, then re-run this."
+  # A minimal Debian/Ubuntu ships no git and we need it to fetch the toolkit. Don't make the
+  # user go install it — offer to do it for them via their package manager.
+  warn "git isn't installed — it's needed to download the toolkit."
+  if offer_pkg_install git; then
+    ok "git installed"
+  else
+    die "couldn't install git automatically (declined or no known package manager). Install
+  git, then re-run this installer."
+  fi
 fi
 # On macOS /usr/bin/git is a STUB that only works once Apple's Command Line Tools are
 # installed. `command -v git` passes for the stub, but actually running git then errors
@@ -161,6 +192,21 @@ if is_mac && ! xcode-select -p >/dev/null 2>&1; then
   die "Click Install in the macOS \"Command Line Developer Tools\" dialog, let it finish, then run this installer again."
 fi
 ok "git present"
+
+# ── 1b. curl (setup downloads Wine with it; acquire downloads your game with it) ──
+# A fresh Ubuntu desktop often lacks curl. Later steps (revert setup / acquire) need it and
+# don't all have a wget fallback, so ensure it now — installing it for the user, not telling
+# them to. (macOS ships curl.)
+if ! is_mac && ! command -v curl >/dev/null; then
+  step "Checking for curl"
+  warn "curl isn't installed — it's needed to download Wine and your game files."
+  if offer_pkg_install curl; then
+    ok "curl installed"
+  else
+    die "couldn't install curl automatically (declined or no known package manager). Install
+  curl, then re-run this installer."
+  fi
+fi
 
 # ── 2. account password (fresh SteamOS 'deck' user has none; setup needs sudo) ─
 # macOS accounts always have a password, and `passwd -S` means something different there,
