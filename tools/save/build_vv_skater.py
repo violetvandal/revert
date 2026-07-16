@@ -13,23 +13,34 @@ ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
 sys.path.insert(0, HERE)
 import vv_profile
 
-PRISTINE = os.path.join(ROOT, 'game-pristine-us', 'Data', 'scripts', 'game', 'skater', 'skater_profile.qb')
 NS = os.path.join(ROOT, 'tools', 'neverscript', 'ns')
-OUT = os.path.join(ROOT, 'mods', 'src', 'vv-skater', 'source', 'skater_profile.ns')
+SRC = os.path.join(ROOT, 'mods', 'src', 'vv-skater', 'source')
+# (pristine .qb, mod .ns output, the vv_profile injector to apply)
+TARGETS = [
+    (os.path.join(ROOT, 'game-pristine-us', 'Data', 'scripts', 'game', 'skater', 'skater_profile.qb'),
+     os.path.join(SRC, 'skater_profile.ns'), 'inject', '+Violet Vandal roster entry'),
+    (os.path.join(ROOT, 'game-pristine-us', 'Data', 'scripts', 'game', 'menu', 'sprites.qb'),
+     os.path.join(SRC, 'sprites.ns'), 'inject_sprites', '+ss_vv portrait in the load array'),
+]
+
+
+def build(pristine, out, injector, note):
+    if not os.path.exists(pristine):
+        raise SystemExit('pristine qb not found: %s' % pristine)
+    tmp = '/tmp/_vv_%s.ns' % os.path.basename(out).split('.')[0]
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    subprocess.run([NS, '-d', pristine, '-o', tmp], capture_output=True, check=True)
+    lines = open(tmp).read().split('\n')
+    result = getattr(vv_profile, injector)(lines)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    open(out, 'w').write('\n'.join(result))
+    print('wrote %s (%s, %d lines)' % (out, note, len(result)))
 
 
 def main():
-    if not os.path.exists(PRISTINE):
-        raise SystemExit('pristine skater_profile.qb not found: %s' % PRISTINE)
-    tmp = '/tmp/_vv_sp.ns'
-    if os.path.exists(tmp):
-        os.remove(tmp)
-    subprocess.run([NS, '-d', PRISTINE, '-o', tmp], capture_output=True, check=True)
-    lines = open(tmp).read().split('\n')
-    out = vv_profile.inject(lines)
-    os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    open(OUT, 'w').write('\n'.join(out))
-    print('wrote %s (+Violet Vandal roster entry, %d lines)' % (OUT, len(out)))
+    for pristine, out, injector, note in TARGETS:
+        build(pristine, out, injector, note)
 
 
 if __name__ == '__main__':

@@ -153,9 +153,38 @@ install_packages_apt() {
   record_packages apt "${new[@]}"
 }
 
+# Desktop Arch / Manjaro (pacman, non-Deck). Arch multilib ships the 32-bit userland,
+# but the [multilib] repo must be ENABLED first (a fresh install often has it commented
+# out) — the analogue of Debian's i386 multiarch, without which no lib32-* resolves. Then
+# install the same tooling + 32-bit X/SDL/Vulkan/udev set the other distros get. (The Deck
+# path is install_packages_deck; this is only reached for a non-Deck pacman box.)
+install_packages_arch() {
+  if ! pacman-conf --repo-list 2>/dev/null | grep -qx multilib; then
+    log "enabling the [multilib] repo (sudo; required for 32-bit Wine)"
+    ask_sudo sed -i '/^#\[multilib\]/,/^#Include/ s/^#//' /etc/pacman.conf \
+      || warn "  could not auto-enable multilib — uncomment [multilib] in /etc/pacman.conf by hand"
+    ask_sudo pacman -Sy || warn "  pacman -Sy failed"
+  fi
+  local pkgs=(
+    winetricks p7zip msitools cabextract python-evdev python-numpy python-pillow
+    # 32-bit X libs (nodrv_CreateWindow without them), SDL2 (gamepad enum), Vulkan loader
+    # + Mesa drivers (DXVK d3d9), and lib32-systemd for the 32-bit libudev the pad needs.
+    lib32-libxrender lib32-libxcursor lib32-libxi lib32-libxrandr
+    lib32-libxcomposite lib32-libxkbcommon
+    lib32-sdl2 lib32-vulkan-icd-loader lib32-vulkan-radeon lib32-vulkan-intel
+    lib32-systemd
+  )
+  local new=() p
+  for p in "${pkgs[@]}"; do pacman -Qq "$p" >/dev/null 2>&1 || new+=("$p"); done
+  log "installing system packages (sudo)"
+  ask_sudo pacman -S --needed --noconfirm "${pkgs[@]}" || warn "pacman install had issues — see above"
+  record_packages pacman "${new[@]}"
+}
+
 install_packages() {
   if (( IS_DECK )); then install_packages_deck; return $?; fi
   if command -v apt-get >/dev/null; then install_packages_apt; return $?; fi
+  if command -v pacman  >/dev/null; then install_packages_arch; return $?; fi
   command -v dnf >/dev/null || { warn "unrecognized package manager: install equivalents of winetricks p7zip msitools cabextract python3-evdev + the 32-bit X/SDL/Vulkan libs yourself"; return 0; }
   local pkgs=(winetricks p7zip p7zip-plugins msitools cabextract python3-evdev python3-numpy python3-pillow)
   local new=() p

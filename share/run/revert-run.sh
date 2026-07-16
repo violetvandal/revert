@@ -17,6 +17,8 @@ REVERT_ROOT="${REVERT_ROOT:-$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")"
 export REVERT_ROOT
 # shellcheck disable=SC1090
 source "${REVERT_ROOT}/revert.conf"
+# shellcheck disable=SC1090
+[[ -f "${REVERT_ROOT}/share/lib/gpu.sh" ]] && source "${REVERT_ROOT}/share/lib/gpu.sh"
 
 log() { printf '\033[1;34m[run]\033[0m %s\n' "$*"; }
 err() { printf '\033[1;31m[run:error]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -60,6 +62,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --soundtrack) SOUNDTRACK="${2:-original}"; shift 2;;
     --glyphs)     GLYPHS="${2:-auto}"; shift 2;;
+    --gpu)        GPU_FILTER="${2:-}"; shift 2;;
     --) shift; break;;
     *) break;;
   esac
@@ -74,6 +77,10 @@ export WINEARCH="$WINEARCH"
 export WINEDEBUG="-all"
 export PATH="$GE_DIR/bin:$PATH"
 [[ -n "$LANE_ENV" ]] && export "${LANE_ENV?}"   # e.g. WINEDLLOVERRIDES=mscoree=b
+
+# GPU selection: --gpu / GPU_FILTER (a deviceName substring) picks which Vulkan adapter
+# DXVK renders on. Empty = DXVK's default (the discrete GPU). See share/lib/gpu.sh.
+[[ -n "${GPU_FILTER:-}" ]] && export DXVK_FILTER_DEVICE_NAME="$GPU_FILTER"
 
 # Force builtin dinput8 on the main lanes so DirectInput enumerates the gamepad. A
 # native dinput8 (e.g. from an old `winetricks dinput8`) silently kills pad detection
@@ -114,6 +121,10 @@ ln -sfn "$REVERT_ROOT" "${PREFIX}/dosdevices/d:"
 # button-glyph style for VV.GlyphFix.asi (xbox/playstation/gamecube/keyboard)
 VV_GLYPHS="$(resolve_glyphs "$GLYPHS")"; export VV_GLYPHS
 log "button glyphs -> $VV_GLYPHS$( [[ "$GLYPHS" == auto ]] && is_steam_deck && echo ' (Steam Deck)')"
+
+# One-time heads-up if this box has a GPU pick worth making (multi-GPU / nouveau / llvmpipe)
+# and no filter is set. Advisory only — never blocks the launch.
+declare -F gpu_advise >/dev/null && gpu_advise log || true
 
 # hooks ------------------------------------------------------------------------
 # Only the main prefix (vanilla/qol) gets wineserver management — the online lane

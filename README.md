@@ -9,7 +9,7 @@ One front door, three lanes:
 | Lane | What |
 |------|------|
 | **Vanilla** | clean THUG2 + no-CD + widescreen + controller |
-| **QOL-Modded** *(flagship)* | the curated mod suite (MOD OPTIONS / LEVEL MODS, HUD fix, HQ A/V, custom tags…) plus **Violet Vandal**, the edition's namesake, as a selectable roster skater — every toggle default-off, vanilla one click away |
+| **QOL-Modded** *(flagship)* | the curated mod suite (MOD OPTIONS / LEVEL MODS, HUD fix, HQ A/V, custom tags…) — every mod default-off, vanilla one click away |
 | **Online** | THUG Pro (bundled optional companion, isolated prefix) |
 
 ## Install (one command)
@@ -42,8 +42,8 @@ terminal. Grab the installer for your machine from the
 | Machine | Download |
 |---------|----------|
 | Linux / Steam Deck | `revert-installer-linux-amd64` |
-| Mac (Apple Silicon) | `revert-installer-darwin-arm64` |
-| Mac (Intel) | `revert-installer-darwin-amd64` |
+| Mac (Apple Silicon) | `revert-installer-darwin-arm64.zip` (unzip → "Revert Installer") |
+| Mac (Intel) | `revert-installer-darwin-amd64.zip` (unzip → "Revert Installer") |
 | Windows | `revert-windows-amd64.zip`, then run `revert-gui.exe` |
 
 On Linux, mark it executable (right-click → *Properties → Permissions → Is executable*, or
@@ -69,9 +69,10 @@ Microsoft-vendor pads to Wine, so other brands will pair with macOS but stay inv
 the game.
 
 > If you download the graphical installer from the releases page instead of using the
-> one-line command, macOS will quarantine it because it is unsigned. Right-click the file
-> and choose *Open*, then confirm, which tells Gatekeeper you trust it. The one-line
-> install above is not affected.
+> one-line command, it arrives as a `.zip`: unzip it to get **Revert Installer**, then the
+> first time, right-click the app and choose *Open* and confirm (it is unsigned, so this tells
+> Gatekeeper you trust it; a normal double-click is fine afterward). The one-line install above
+> is not affected.
 
 ## Quick start (already cloned)
 If you cloned the repo yourself (`git clone --recursive`), drive the lifecycle directly:
