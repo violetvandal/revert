@@ -93,7 +93,9 @@ jobs:
         with:
           name: windows-binaries
           path: out/
-          retention-days: 5
+          # Only the defender-scan job (same run, minutes later) consumes this; keep it
+          # briefly so it doesn't accumulate as stored-artifact storage.
+          retention-days: 1
 
   defender-scan:
     name: scan with Microsoft Defender
