@@ -1,0 +1,4 @@
+# Build dependencies for the Revert developer docs (MkDocs Material).
+# Pinned to a compatible major line; bump deliberately.
+mkdocs-material>=9.5,<10
+pymdown-extensions>=10

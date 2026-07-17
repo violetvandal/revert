@@ -1,0 +1,80 @@
+site_name: Revert — developer docs
+site_description: >-
+  How the Revert toolkit and the thugkit engine build THUG2: Violet Vandal
+  Edition. Architecture, the build pipeline, the byte-critical codecs, testing,
+  mod authoring, and how to add a platform lane.
+site_url: https://docs.thug2vandal.com
+docs_dir: docs-site
+copyright: Built by Violet Vandal · MIT-licensed tooling · ships no game data
+use_directory_urls: true
+
+theme:
+  name: material
+  language: en
+  icon:
+    logo: material/skateboard
+    repo: fontawesome/brands/github
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+
+repo_name: violetvandal/revert
+repo_url: https://github.com/violetvandal/revert
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Getting started: index.md
+  - Architecture: architecture.md
+  - Build pipeline: build-pipeline.md
+  - Codecs & byte-perfection: codecs.md
+  - Testing: testing.md
+  - Authoring mods: modding.md
+  - Platform lanes: platform-lanes.md
+  - Contributing: contributing.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/violetvandal/revert
+    - icon: material/web
+      link: https://thug2vandal.com
