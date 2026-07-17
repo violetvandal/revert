@@ -24,10 +24,25 @@ import os, sys, signal
 import evdev
 from evdev import ecodes, UInput
 
-LT_AXIS, RT_AXIS = ecodes.ABS_Z, ecodes.ABS_RZ      # triggers (0..255, rest 0)
+LT_AXIS, RT_AXIS = ecodes.ABS_Z, ecodes.ABS_RZ      # default triggers (XInput/xpad; rest 0)
 LB_BTN,  RB_BTN  = ecodes.BTN_TL, ecodes.BTN_TR     # bumpers
 KP7, KP9, KP1    = ecodes.KEY_KP7, ecodes.KEY_KP9, ecodes.KEY_KP1
 TRIG_ON, TRIG_OFF = 100, 60                          # trigger hysteresis
+
+def trigger_axes(dev):
+    """Return (lt_axis, rt_axis): the axes that are the ACTUAL analog triggers on this pad.
+
+    XInput/xpad pads put the triggers on ABS_Z/ABS_RZ (rest 0) and the right stick on
+    ABS_RX/ABS_RY. But DirectInput-style HID pads (e.g. a GameSir G7 Pro in D-mode) do the
+    opposite: the RIGHT STICK sits on ABS_Z/ABS_RZ (rest at centre ~128) and the triggers
+    are ABS_GAS/ABS_BRAKE (rest 0). Reading Z/RZ on such a pad makes the centred stick look
+    like both triggers are permanently held (jumps turn into acid-drops / level-outs). So
+    prefer GAS/BRAKE whenever the pad exposes them; otherwise fall back to Z/RZ.
+    """
+    absc = {c for c, _ in dev.capabilities().get(ecodes.EV_ABS, [])}
+    if {ecodes.ABS_GAS, ecodes.ABS_BRAKE} <= absc:
+        return ecodes.ABS_BRAKE, ecodes.ABS_GAS      # LT = BRAKE, RT = GAS
+    return LT_AXIS, RT_AXIS
 
 def find_pad():
     # Identify the pad by CAPABILITY, not by name. The bridge needs both triggers as
@@ -46,7 +61,9 @@ def find_pad():
         caps = d.capabilities()
         absc = {c for c, _ in caps.get(ecodes.EV_ABS, [])}
         keyc = set(caps.get(ecodes.EV_KEY, []))
-        if {ecodes.ABS_Z, ecodes.ABS_RZ} <= absc and {ecodes.BTN_TL, ecodes.BTN_TR} <= keyc:
+        has_triggers = ({ecodes.ABS_Z, ecodes.ABS_RZ} <= absc
+                        or {ecodes.ABS_GAS, ecodes.ABS_BRAKE} <= absc)
+        if has_triggers and {ecodes.BTN_TL, ecodes.BTN_TR} <= keyc:
             picks.append(d)
     for d in picks:
         if any(s in d.name for s in ("X-Box", "Xbox", "360", "Microsoft X-Box")):
@@ -58,6 +75,7 @@ def main():
     if not dev:
         print("shoulder-bridge: no XInput-style pad found (need trigger axes + bumpers)", file=sys.stderr)
         return 1
+    lt_axis, rt_axis = trigger_axes(dev)
     ui = UInput({ecodes.EV_KEY: [KP7, KP9, KP1]}, name="thug2-shoulder-bridge")
 
     st = {"lt": False, "rt": False, "lb": False, "rb": False}
@@ -92,15 +110,16 @@ def main():
         os._exit(0)
     signal.signal(signal.SIGINT, cleanup)
     signal.signal(signal.SIGTERM, cleanup)
-    print(f"shoulder-bridge: {dev.name}  LT/LB->KP7  RT/RB->KP9  LB+RB->KP1(walk)  (ctrl-C to stop)",
+    print(f"shoulder-bridge: {dev.name}  triggers={ecodes.ABS[lt_axis]}/{ecodes.ABS[rt_axis]}  "
+          f"LT/LB->KP7  RT/RB->KP9  LB+RB->KP1(walk)  (ctrl-C to stop)",
           file=sys.stderr, flush=True)
 
     try:
         for ev in dev.read_loop():
             if ev.type == ecodes.EV_ABS:
-                if ev.code == LT_AXIS:
+                if ev.code == lt_axis:
                     st["lt"] = True if ev.value >= TRIG_ON else (False if ev.value <= TRIG_OFF else st["lt"])
-                elif ev.code == RT_AXIS:
+                elif ev.code == rt_axis:
                     st["rt"] = True if ev.value >= TRIG_ON else (False if ev.value <= TRIG_OFF else st["rt"])
                 else:
                     continue
