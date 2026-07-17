@@ -132,7 +132,7 @@ cmd_doctor() {
 # ---- build: produce the edition ------------------------------------------------
 # Go core (thugkit build) does the portable, zero-dep work; this bash wrapper does
 # the archive extraction (7z) + the optional Python CAS asset post-pass. Supersedes
-# rebuild-playable.sh (kept as share/legacy reference).
+# the old rebuild-playable.sh.
 ensure_thugkit() {
   # thugkit with no args prints usage (containing "build") then exits non-zero; under
   # `set -o pipefail` a bare `thugkit | grep` would surface that non-zero and wrongly

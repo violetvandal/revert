@@ -91,8 +91,8 @@ never game data); see `README-WINDOWS.txt`.
 Fyne GUI front door; Steam-Deck packaging; porting the Python CAS steps and the
 licensed-asset injectors to Go; multi-distro setup beyond Fedora (doctor warns).
 
-## Legacy (superseded, kept for reference)
-The superseded scripts now live in `share/legacy/`: `rebuild-playable.sh` (→ `revert
-build`), the `run-*.sh` lane launchers (→ `revert run`), and the `run-*-trace.sh` RE
-diagnostics. Root keeps only `install.sh` — the live one-command bootstrap
-(`bash <(curl … install.sh)`), which chains `revert setup` + `acquire-game-data` + `build`.
+## Legacy
+`rebuild-playable.sh` (→ `revert build`), the `run-*.sh` lane launchers (→ `revert run`),
+and the old `run-*-trace.sh` RE diagnostics have all been superseded and removed. Root keeps
+only `install.sh` — the live one-command bootstrap (`bash <(curl … install.sh)`), which
+chains `revert setup` + `acquire-game-data` + `build`.

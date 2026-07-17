@@ -100,7 +100,7 @@ still shells to `thugkit`, `tag` passes through, `run` launches `THUG2.exe` dire
 
 ## Legacy
 
-Superseded scripts live in `share/legacy/`: `rebuild-playable.sh` (now `revert build`), the
-`run-*.sh` lane launchers (now `revert run`), and the `run-*-trace.sh` RE diagnostics. The
-root keeps only `install.sh`, the live one-command bootstrap that chains `revert setup` +
+`rebuild-playable.sh` (now `revert build`), the `run-*.sh` lane launchers (now `revert run`),
+and the old `run-*-trace.sh` RE diagnostics have all been superseded and removed. The root
+keeps only `install.sh`, the live one-command bootstrap that chains `revert setup` +
 `acquire-game-data` + `build`.
