@@ -608,7 +608,15 @@ function startInstall() {
 function pickInto(targetId, btnId) {
   const b = document.getElementById(btnId); b.disabled = true; b.textContent = '…';
   fetch('/api/pick').then(r => r.json()).then(j => {
-    if (j.path) { document.getElementById(targetId).value = j.path; validateWizard(); }
+    if (j.path) {
+      const el = document.getElementById(targetId);
+      el.value = j.path;
+      // Fire the field's own 'input' listener so the RIGHT Install button re-gates.
+      // Assigning .value in JS doesn't emit 'input', and hardcoding validateWizard()
+      // here re-validated the Linux wizard only — leaving the Windows wizard's Install
+      // button stuck disabled after Browse (the reported bug).
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
     else if (j.error) append('⚠ ' + j.error, 'err');
   }).catch(() => {}).finally(() => { b.disabled = false; b.textContent = 'Browse…'; });
 }
