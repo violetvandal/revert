@@ -11,6 +11,11 @@ docs site). The short version:
 - **Byte-perfection = boot safety.** Inject `qb_scripts` compressed (about 1.43 MiB ceiling),
   verify round-trips, and always boot-test after touching any front-end or boot-pack file.
 - **No game data, ever.** Nothing licensed or derivative goes in a public repo.
+- **If you wrote it with AI, say so in the pull request.** One line is plenty. It is not a
+  confession and it does not count against you: this project was built with AI assistance
+  too, and it is stated openly at <https://thug2vandal.com/about>. Knowing just tells a
+  reviewer where to read hardest. The bar is the same either way: does it work, is it
+  tested, does it fit.
 
 Architecture, the build pipeline, the codecs, testing, mod authoring, and how to add a
 platform lane are all documented at <https://docs.thug2vandal.com>.

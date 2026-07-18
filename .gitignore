@@ -119,3 +119,6 @@ gui/dist/
 
 # Downloaded THUG Pro installer stub (fetched by `revert setup --online`; re-fetched on demand)
 .revert-thugpro-setup.exe
+
+# local LAN file server (game data, tarballs, bare repos) — never commit
+serve/

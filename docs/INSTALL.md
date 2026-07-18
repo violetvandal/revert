@@ -4,25 +4,27 @@ Revert ships **tooling, not game data**. You must own Tony Hawk's Underground 2 
 Some optional enhancements are user-supplied (see below).
 
 > **Just want the easy path?** Run the one-command bootstrap
-> (`bash <(curl -fsSL …/install.sh)`), which works on Linux, the Steam Deck, and macOS, or
+> (`bash <(curl -fsSL …/install.sh)`, or `bash <(wget -qO- …/install.sh)` on Ubuntu/Debian,
+> which ship without curl), which works on Linux, the Steam Deck, and macOS, or
 > download the graphical installer for your machine from the
 > [latest release](https://github.com/violetvandal/revert/releases/latest). Both do
 > everything below for you. This document is the **manual / CLI** reference for driving each
 > step yourself.
 
+> **New to this? Follow the friendly per-platform guide instead:**
+> [Steam Deck](INSTALL-steamdeck.md) · [Linux desktop](INSTALL-linux.md) ·
+> [Windows](INSTALL-windows.md) · [Mac](INSTALL-mac.md). Each is a single, beginner-followable
+> path. This page is the manual/CLI reference they link back to.
+
 ## Prerequisites
 
 ### Linux / Steam Deck
-- Linux. `revert setup` installs the system packages automatically on Fedora (dnf),
-  Debian/Ubuntu (apt, enabling i386 multiarch for you), and Steam Deck/Arch (pacman).
-  Fedora and the Steam Deck are the most-tested targets.
+- Linux (Fedora is the tested/flagship target; other distros: install the equivalents).
 - A **GE-Proton / wine-ge** runner (via Lutris or ProtonUp-Qt). System Fedora wine is
   wow64-only and cannot host the win32 prefix THUG2 needs. Point `GE_DIR` in
-  `revert.conf` at it. On a fresh box without a runner, `revert setup` downloads a
-  known-good Wine (Kron4ek 11.11) for you.
-- Packages: `winetricks p7zip msitools cabextract python3-evdev`, numpy + Pillow, and
-  the 32-bit X / SDL2 / Vulkan / udev libraries (`revert setup` installs the right names
-  for your package manager; the 32-bit udev is what makes controllers work under Wine).
+  `revert.conf` at it.
+- Packages: `winetricks p7zip p7zip-plugins msitools cabextract python3-evdev`
+  (`revert setup` installs these on Fedora).
 - A Go toolchain (only to build `tools/thugkit/thugkit` from source; shipped builds
   carry a prebuilt binary).
 

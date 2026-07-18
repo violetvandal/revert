@@ -275,8 +275,54 @@ install_dxvk() {  # $1 = prefix path
 # SDL game controllers — THUG2 (a DirectInput game) then sees NO pad at all. Wine's
 # builtin dinput8 enumerates the pad correctly (as "Controller (XBOX 360 For Windows)",
 # guidInstance matching the saved pad0). set_dinput8_builtin() enforces builtin below.
+# winetricks' d3dx9 verb downloads directx_Jun2010_redist.exe (~96MB) from a SINGLE
+# third-party mirror (files.holarse-linuxgaming.de). Measured at ~280 KB/s on a test box:
+# roughly six minutes of no visible progress, which reads as a hung installer, and every
+# Linux user pays it. It is also a single point of failure we do not control.
+#
+# We cannot just point at a faster mirror: winetricks pins the sha256 below and rejects
+# anything else. Microsoft's original URL still resolves but now serves a RE-SIGNED binary
+# with a different hash (053f76dc…, 3128 bytes larger), which winetricks refuses — almost
+# certainly why winetricks switched mirrors in 2021.
+#
+# So we fetch the exact pinned file ourselves and drop it in winetricks' cache; winetricks
+# verifies the hash and skips its own download. Every failure path here is non-fatal and
+# falls back to today's behaviour, so this can only make things faster, never break them.
+DIRECTX_SHA256=8746ee1a84a083a90e37899d71d50d5c7c015e69688a466aa80447f011780c0d
+DIRECTX_URL="${DIRECTX_URL:-https://github.com/violetvandal/revert/releases/download/directx-redist/directx_Jun2010_redist.exe}"
+
+preseed_directx_cache() {
+  # winetricks: W_CACHE, else $XDG_CACHE_HOME/winetricks, else ~/.cache/winetricks
+  local cache="${W_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/winetricks}/directx9"
+  local dst="$cache/directx_Jun2010_redist.exe"
+  local tmp="$dst.revert-part"
+
+  # Already cached and valid (fresh run, or winetricks fetched it previously).
+  if [[ -f "$dst" ]] && printf '%s  %s\n' "$DIRECTX_SHA256" "$dst" | sha256sum -c --status 2>/dev/null; then
+    return 0
+  fi
+  command -v curl      >/dev/null || return 0
+  command -v sha256sum >/dev/null || return 0
+  mkdir -p "$cache" 2>/dev/null   || return 0
+
+  log "pre-fetching the DirectX 9 runtime (~96MB) — skips a slow third-party mirror"
+  if ! curl -fL --retry 3 --connect-timeout 15 -o "$tmp" "$DIRECTX_URL" 2>/dev/null; then
+    rm -f "$tmp"
+    warn "  our DirectX mirror was unreachable — winetricks will fetch it (slower)"
+    return 0
+  fi
+  if ! printf '%s  %s\n' "$DIRECTX_SHA256" "$tmp" | sha256sum -c --status 2>/dev/null; then
+    rm -f "$tmp"
+    warn "  DirectX checksum mismatch — discarded; winetricks will fetch it"
+    return 0
+  fi
+  mv -f "$tmp" "$dst" 2>/dev/null || { rm -f "$tmp"; return 0; }
+  log "  DirectX runtime cached — winetricks will skip its download"
+}
+
 install_winetricks_components() {  # $1 = prefix
   command -v winetricks >/dev/null || { warn "winetricks absent — skipping d3dx9"; return 0; }
+  preseed_directx_cache
   log "winetricks: d3dx9 sound=pulse"
   WINEPREFIX="$1" WINE="$GE_WINE" WINEDEBUG=-all winetricks -q d3dx9 sound=pulse || warn "winetricks step had issues"
 }

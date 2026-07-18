@@ -24,6 +24,10 @@ shortcut), downloads *your* THUG2 copy from a link you paste, and builds the edi
 On a fresh Steam Deck the result is **turnkey**: it lands in your library and plays with
 widescreen + analog controller, no manual steps. See [docs/STEAMDECK.md](docs/STEAMDECK.md).
 
+> **Ubuntu/Debian** ship without `curl`. Swap in `wget`, which they do have:
+> `bash <(wget -qO- https://raw.githubusercontent.com/violetvandal/revert/main/install.sh)`
+> (or run `sudo apt install curl` first). Everything after that is identical.
+
 > Run it exactly as shown — `bash <(curl …)`, **not** `curl … | bash`. Piping makes the
 > script bash's stdin, so the one-time password/sudo prompt can't read your keyboard.
 
@@ -35,8 +39,8 @@ Prefer not to touch a terminal? **Download the installer** and run it — a grap
 wizard does everything the command above does, with a live progress log. It asks for just
 three things (where to install, your account password, and a link/folder for your THUG2
 copy), then sets up Wine, fetches your game, and builds the edition. On a fresh Steam Deck
-it even sets your account password for you and handles the one `sudo` step with no
-terminal. Grab the installer for your machine from the
+it even walks you through picking an account password if you don't have one, then handles the one
+`sudo` step with no terminal. Grab the installer for your machine from the
 [latest release](https://github.com/violetvandal/revert/releases/latest):
 
 | Machine | Download |
@@ -46,8 +50,9 @@ terminal. Grab the installer for your machine from the
 | Mac (Intel) | `revert-installer-darwin-amd64.zip` (unzip → "Revert Installer") |
 | Windows | `revert-windows-amd64.zip`, then run `revert-gui.exe` |
 
-On Linux, mark it executable (right-click → *Properties → Permissions → Is executable*, or
-`chmod +x`) and double-click it. On a Mac, see the Gatekeeper note below.
+On Linux, double-click it and confirm when your file manager asks. If your desktop refuses to run it
+(GNOME Files will not launch programs this way), mark it executable first: right-click →
+*Properties → Permissions → Is executable*, or `chmod +x`. On a Mac, see the Gatekeeper note below.
 
 ### On a Mac
 Both **Apple Silicon** (M1 and later) and **Intel** Macs are supported, with the same

@@ -17,9 +17,10 @@ No terminal and no second computer — just the Deck.
 1. In **Desktop Mode**, open Firefox and download the installer:
    **[`revert-installer-linux-amd64`](https://github.com/violetvandal/revert/releases/latest)**
    (under *Assets* on the latest release).
-2. In Dolphin, right-click it → **Properties → Permissions → Is executable**, then double-click it.
-3. A wizard opens in your browser. Give it three things — where to install, a password (it
-   **creates your Deck password** if you don't have one yet), and a link or folder for your own
+2. In Dolphin, double-click it and choose **Launch**. (If it will not run, right-click it →
+   **Properties → Permissions → Is executable**, then try again.)
+3. A wizard opens in your browser. Give it three things — where to install, a password (if your
+   Deck has never had one, you **pick it there** and the wizard sets it up), and a link or folder for your own
    THUG2 copy — then press **Install & build**. It installs Wine, fetches your game, builds the
    edition, and calibrates the controller, keeping the Deck awake the whole time. No terminal at
    any point.
