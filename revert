@@ -358,9 +358,21 @@ cmd_uninstall() {
 # ---- gui: build (once) + launch the local web-UI installer ---------------------
 cmd_gui() {
   local dir="${REVERT_ROOT}/gui" bin="${REVERT_ROOT}/gui/revert-gui"
+  # Build when the binary is missing OR when any Go/web source is newer than it. The
+  # staleness check matters: the GUI embeds gui/web/ at compile time, so after an update
+  # or `git pull` a prebuilt binary would silently keep serving the OLD UI (this is how a
+  # stale binary shipped the pre-fix install wizard). Rebuild only needs Go; with no Go
+  # toolchain we fall back to running whatever binary exists.
+  local need_build=""
   if [[ ! -x "$bin" ]]; then
+    need_build=1
+  elif command -v go >/dev/null && \
+       [[ -n "$(find "$dir" \( -name '*.go' -o -path '*/web/*' \) -newer "$bin" -print -quit 2>/dev/null)" ]]; then
+    need_build=1
+  fi
+  if [[ -n "$need_build" ]]; then
     command -v go >/dev/null || err "the GUI needs Go to build once (or a prebuilt gui/revert-gui). Install Go, or use the CLI: revert doctor|setup|build|run."
-    log "building the GUI (one-time) ..."
+    log "building the GUI ..."
     ( cd "$dir" && go build -o revert-gui . ) || err "GUI build failed"
   fi
   exec "$bin" "$@"
