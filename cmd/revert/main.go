@@ -22,6 +22,7 @@ const usage = `revert — front door for THUG2: Violet Vandal Edition (Windows-n
   revert build [--fast] [--lane qol|vanilla] [--only a,b]   build the edition
   revert run <vanilla|qol|online> [--soundtrack original|radio] [--glyphs xbox|playstation|gamecube|keyboard]
   revert status [--json]                     report lifecycle state (used by the GUI)
+  revert report [-o FILE] [--no-log]         collect a diagnostic bundle for a bug report
   revert calibrate-controller                detect the pad's DirectInput GUID + bind pad0
   revert install-desktop                     add Start Menu + Desktop shortcuts
   revert update [--check] [--force]          update to the latest release + rebuild
@@ -50,6 +51,8 @@ func main() {
 		run(withConf(func(c *core.Conf) error { return core.Doctor(c) }))
 	case "status":
 		run(withConf(func(c *core.Conf) error { return cmdStatus(c, rest) }))
+	case "report", "bug-report":
+		run(withConf(func(c *core.Conf) error { return core.Report(c, parseReport(rest)) }))
 	case "setup":
 		run(withConf(func(c *core.Conf) error { return core.Setup(c, parseSetup(rest)) }))
 	case "acquire-game-data":
@@ -144,6 +147,19 @@ func cmdRun(c *core.Conf, rest []string) error {
 		}
 	}
 	return core.Run(c, o)
+}
+
+func parseReport(rest []string) core.ReportOptions {
+	var o core.ReportOptions
+	for i := 0; i < len(rest); i++ {
+		switch rest[i] {
+		case "-o", "--output":
+			o.Output, i = next(rest, i)
+		case "--no-log":
+			o.NoLog = true
+		}
+	}
+	return o
 }
 
 func parseUpdate(rest []string) core.UpdateOptions {

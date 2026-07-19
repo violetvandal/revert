@@ -17,6 +17,7 @@
 #   revert update [--check]                update to the latest release + rebuild
 #   revert uninstall [--purge]             remove Revert (--purge = also saves/Go/packages)
 #   revert status [--json]                 report lifecycle state (used by the GUI)
+#   revert report [-o FILE]                collect a diagnostic bundle for a bug report
 #   revert version                         print the release this checkout is on
 #
 # Architecture (see docs/ARCHITECTURE.md): a Go "build" core (thugkit) owns producing
@@ -79,8 +80,20 @@ ok()   { printf '  %s✓%s %s\n' "$c_grn" "$c_off" "$*"; }
 bad()  { printf '  %s✗%s %s\n' "$c_red" "$c_off" "$*"; }
 note() { printf '  %s· %s%s\n' "$c_dim" "$*" "$c_off"; }
 
+# Print the header comment block (from line 3) as the help text, stopping at the
+# "Architecture" note, which is a maintainer aside and not for users.
+#
+# Driven by content, not by line numbers: the previous version hardcoded `sed -n '3,22p'`,
+# so adding one command to the list above silently pushed the last line out of the help
+# and pulled half a sentence of the architecture note in. Nothing failed, the help was
+# just quietly wrong.
 usage() {
-  sed -n '3,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  awk 'NR >= 3 {
+         if ($0 !~ /^#/) exit
+         if ($0 ~ /^# Architecture/) exit
+         sub(/^# ?/, "")
+         print
+       }' "${BASH_SOURCE[0]}"
   exit "${1:-0}"
 }
 
@@ -509,6 +522,7 @@ case "${1:-help}" in
   update)            shift; cmd_update "$@";;
   uninstall)         shift; cmd_uninstall "$@";;
   status)            shift; cmd_status "$@";;
+  report|bug-report) shift; bash "${SHARE_DIR}/setup/revert-report.sh" "$@";;
   build)             shift; cmd_build "$@";;
   run)               shift; cmd_run "$@";;
   gui)               shift; cmd_gui "$@";;

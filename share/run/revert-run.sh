@@ -249,6 +249,39 @@ for h in "${_hooks[@]}"; do run_hook "$h"; done
 # the bridge and left the server up, which broke the next relaunch.
 log "lane=$lane prefix=$PREFIX exe=$EXE"
 cd "$DIR"
-rc=0; "$GE_DIR/bin/wine" "$EXE" "$@" || rc=$?
+
+# Keep the last launch's Wine output on disk so `revert report` has something real to
+# attach. Overwritten every run (it is "last", not a history), and the reporter only
+# ever quotes the tail, so this cannot grow without bound.
+#
+# Teed via process substitution rather than a `| tee` pipeline on purpose: a pipeline
+# would make `rc` the exit status of tee, which is always 0, and the launcher would
+# report every crash as a clean exit.
+RUN_LOG="${REVERT_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/revert}/last-run.log"
+mkdir -p "$(dirname "$RUN_LOG")" 2>/dev/null || true
+if : > "$RUN_LOG" 2>/dev/null; then
+  {
+    echo "# revert run — lane=$lane soundtrack=$SOUNDTRACK glyphs=$GLYPHS"
+    echo "# wine: $GE_DIR"
+    echo "# exe:  $EXE"
+    echo "# ---- wine output below ----"
+  } >> "$RUN_LOG"
+  rc=0
+  "$GE_DIR/bin/wine" "$EXE" "$@" \
+    > >(tee -a "$RUN_LOG") \
+    2> >(tee -a "$RUN_LOG" >&2) || rc=$?
+  # The tee subshells are async; give them a moment to flush before anything reads the
+  # file, otherwise the most interesting lines (the ones right before a crash) are the
+  # exact ones missing from the report.
+  sleep 0.2
+  echo "# ---- exit code $rc ----" >> "$RUN_LOG"
+else
+  log "(could not write $RUN_LOG — running without a log)"
+  rc=0; "$GE_DIR/bin/wine" "$EXE" "$@" || rc=$?
+fi
+
 log "game exited (code $rc) — cleaning up"
+if (( rc != 0 )); then
+  log "that looks like a crash. To report it: revert report"
+fi
 exit "$rc"

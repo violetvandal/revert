@@ -1,0 +1,81 @@
+name: Something is broken
+description: The install, the build, the controller, or the game itself is not working.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The single most useful thing you can attach is the
+        output of **`revert report`**, which collects your distro, GPU, driver versions
+        and the tail of the last launch in one go.
+
+        It redacts your home directory and username before it saves anything, and it is
+        plain text, so you can read it before you post it.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, and what did it do instead of working?
+      placeholder: |
+        I ran `revert run qol` and the window opened black, then closed after about five seconds.
+    validations:
+      required: true
+
+  - type: textarea
+    id: report
+    attributes:
+      label: Output of `revert report`
+      description: |
+        Run `revert report` and paste the result here (or drag the saved
+        `revert-report.txt` onto this box to attach it).
+      render: text
+    validations:
+      required: false
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux desktop
+        - Steam Deck
+        - Windows
+        - macOS
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: lane
+    attributes:
+      label: Which lane
+      description: Which of the three ways to play were you using?
+      options:
+        - QOL-Modded (revert run qol)
+        - Vanilla (revert run vanilla)
+        - Online / THUG Pro (revert run online)
+        - It never got as far as running
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: anything-else
+    attributes:
+      label: Anything else
+      description: |
+        Screenshots or a short clip help a lot for anything visual. If you already tried
+        something that changed the behaviour, say so.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Before you post
+      options:
+        - label: I own a copy of THUG2. (This project ships tooling, never game data, and cannot help with obtaining the game.)
+          required: true
+        - label: I have not pasted anything into this issue that I would not want public.
+          required: true

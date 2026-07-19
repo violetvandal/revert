@@ -5,7 +5,12 @@
 #
 #   tools/deck/sync-to-deck.sh [SRC] [DEST]
 #     SRC   default: this repo root (the dir containing revert.conf)
-#     DEST  default: deck@192.168.1.204:thug2
+#     DEST  default: ${DECK_HOST}:thug2, and DECK_HOST defaults to deck@steamdeck.local
+#
+# Set DECK_HOST if your Deck is not reachable by its mDNS name, e.g.
+#   DECK_HOST=deck@<your-deck-ip> tools/deck/sync-to-deck.sh
+# (This used to default to one specific machine's LAN address, which was useless to
+# anyone else and put a home IP in a public repo.)
 #
 # WHITELIST, not blacklist: the dev machine's repo also holds many GB of disc
 # rips/backups/build assets with unpredictable names (a blacklist missed them and
@@ -16,7 +21,7 @@
 set -euo pipefail
 
 SRC="${1:-$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../.." && pwd)}"
-DEST="${2:-deck@192.168.1.204:thug2}"
+DEST="${2:-${DECK_HOST:-deck@steamdeck.local}:thug2}"
 cd "$SRC"
 [[ -f revert.conf ]] || { echo "no revert.conf in SRC=$SRC" >&2; exit 1; }
 [[ -d game-playable-us ]] || echo "warning: game-playable-us missing — run 'revert build' first" >&2

@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,6 +39,28 @@ func runInherit(dir string, env []string, name string, args ...string) error {
 	c := exec.Command(name, args...)
 	c.Dir = dir
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if len(env) > 0 {
+		c.Env = append(os.Environ(), env...)
+	}
+	return c.Run()
+}
+
+// runTee is runInherit that also copies the child's stdout+stderr into logw, so the last
+// launch survives on disk for `revert report` to quote. The user still sees everything
+// live; logw is a second destination, not a redirection.
+//
+// A nil logw makes this exactly runInherit, which is the point: every caller can ask for
+// a log unconditionally and a failure to open the log file degrades to "no log" rather
+// than to "the game will not start".
+func runTee(logw io.Writer, dir string, env []string, name string, args ...string) error {
+	if logw == nil {
+		return runInherit(dir, env, name, args...)
+	}
+	c := exec.Command(name, args...)
+	c.Dir = dir
+	c.Stdin = os.Stdin
+	c.Stdout = io.MultiWriter(os.Stdout, logw)
+	c.Stderr = io.MultiWriter(os.Stderr, logw)
 	if len(env) > 0 {
 		c.Env = append(os.Environ(), env...)
 	}

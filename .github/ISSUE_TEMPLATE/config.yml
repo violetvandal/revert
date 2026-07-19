@@ -1,0 +1,14 @@
+# "Something is broken" and the hardware-report template are the only forms. Everything
+# else routes somewhere better than an issue: install questions belong with the guides,
+# and the tracker is not the place to ask for game files.
+blank_issues_enabled: true
+contact_links:
+  - name: Installing it for the first time
+    url: https://thug2vandal.com/install
+    about: Step-by-step guides with video for Linux, Steam Deck, Windows and macOS. Start here if nothing is installed yet.
+  - name: Will it run on my machine?
+    url: https://thug2vandal.com/requirements
+    about: What the GPU and driver requirements actually are, per platform.
+  - name: How the toolkit works
+    url: https://docs.thug2vandal.com
+    about: Architecture, the build pipeline, mod authoring, and how to add a platform lane.

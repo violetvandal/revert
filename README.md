@@ -133,6 +133,19 @@ See [docs/INSTALL.md](docs/INSTALL.md) for the full setup,
 > packs. You must own the game; some optional content (HQ A/V, brand decks) is
 > user-supplied. See [docs/INSTALL.md](docs/INSTALL.md).
 
+## When something breaks
+```sh
+./revert doctor    # read-only: what's present, what's missing, in plain words
+./revert report    # the whole picture in one file, ready to attach to an issue
+```
+`revert report` collects your OS, GPU and driver, how far the install got, and the tail of
+the last launch. It redacts your home directory and username before saving, so the result
+is safe to paste publicly. Then open an issue:
+<https://github.com/violetvandal/revert/issues/new/choose>
+
+Reports from hardware that *worked* are just as welcome, and are most of what we know
+about unusual setups.
+
 ## License
 Revert is MIT licensed (see [LICENSE](LICENSE)). It redistributes a few third-party
 components under their own licenses, including a **modified** build of DXVK (zlib) for the

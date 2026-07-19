@@ -1,0 +1,44 @@
+name: It worked (or half-worked) on my hardware
+description: Tell us what your machine is and how it went. This is how the compatibility picture gets built.
+labels: ["hardware"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Nothing has to be broken to file this. Most of what we know about odd hardware
+        comes from people who ran it once and said so, and a report that says "this
+        worked" is genuinely as useful as one that says it did not.
+
+        Run **`revert report`** and paste it below. It redacts your home directory and
+        username before saving.
+
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: How did it go
+      options:
+        - Worked, no problems
+        - Worked after some fiddling (say what, below)
+        - Partly worked (graphics, sound, or controller off)
+        - Did not work at all
+    validations:
+      required: true
+
+  - type: textarea
+    id: report
+    attributes:
+      label: Output of `revert report`
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: |
+        Anything worth knowing: frame rate, whether the controller bound first time,
+        anything you had to change. If you fiddled with something to make it work, that
+        detail is the whole value of this report.
+    validations:
+      required: false

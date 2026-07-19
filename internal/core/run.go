@@ -112,7 +112,13 @@ func runWindows(c *Conf, o RunOptions) error {
 	}
 
 	fmt.Printf("[run] lane=%s exe=%s\n", o.Lane, exe)
-	err := runInherit(dir, env, filepath.Join(dir, exe), o.ExtraArgs...)
+	// Keep this launch's output on disk so `revert report` has something real to attach.
+	// Best-effort: a nil log writer just means the game runs without one.
+	logw := OpenRunLog(fmt.Sprintf("lane=%s exe=%s glyphs=%s", o.Lane, exe, glyphs))
+	err := runTee(logw, dir, env, filepath.Join(dir, exe), o.ExtraArgs...)
+	if logw != nil {
+		_ = logw.Close()
+	}
 
 	if bridge != nil && bridge.Process != nil {
 		_ = bridge.Process.Kill()
@@ -120,6 +126,7 @@ func runWindows(c *Conf, o RunOptions) error {
 	code := ExitCode(err)
 	fmt.Printf("[run] game exited (code %d)\n", code)
 	if err != nil {
+		fmt.Println("[run] that looks like a crash. To report it: revert report")
 		return err
 	}
 	return nil

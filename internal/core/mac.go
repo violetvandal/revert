@@ -765,7 +765,15 @@ func macLaunch(p macPaths, dir, res string, env []string) error {
 	}
 
 	args := []string{"explorer", "/desktop=" + macDesktop + "," + res, "cmd", "/c", "vv-run.bat"}
-	return runInherit(dir, env, p.Wine, args...)
+	// Tee the launch so `revert report` has the last run's Wine output to quote. On the
+	// Mac lane especially, the interesting failures (MoltenVK, Rosetta, DXVK) all announce
+	// themselves on stderr and were previously lost the moment the window closed.
+	logw := OpenRunLog("macOS lane, res=" + res)
+	err := runTee(logw, dir, env, p.Wine, args...)
+	if logw != nil {
+		_ = logw.Close()
+	}
+	return err
 }
 
 // macKillBridge reaps the trick bridge. vv-run.bat taskkills it on a clean exit, but if

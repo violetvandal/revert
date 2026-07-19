@@ -3,6 +3,9 @@
 Full contributor docs live at **<https://docs.thug2vandal.com/contributing/>** (the developer
 docs site). The short version:
 
+- **Filing a bug:** run `./revert report` and attach the file it writes. It gathers the
+  OS, GPU, driver, lifecycle state and the last launch's output, with your home directory
+  and username redacted. Reports from hardware that worked are welcome too.
 - **Build from source:** `git clone --recursive`, then `cd tools/thugkit && go build
   ./cmd/thugkit && go test ./...`, then `./revert doctor` and `./revert build` from the root.
 - **Go for anything shipped or cross-platform**; Python only for one-off RE / author-side tools.
