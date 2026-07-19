@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 )
 
 // DelegateToBash runs the proven bash dispatcher `<root>/revert <cmd> <args...>` with
@@ -59,12 +60,32 @@ func runTee(logw io.Writer, dir string, env []string, name string, args ...strin
 	c := exec.Command(name, args...)
 	c.Dir = dir
 	c.Stdin = os.Stdin
-	c.Stdout = io.MultiWriter(os.Stdout, logw)
-	c.Stderr = io.MultiWriter(os.Stderr, logw)
+	// Both pipes must funnel into logw through ONE synchronized writer.
+	//
+	// os/exec copies stdout and stderr on separate goroutines whenever they are not
+	// *os.File, so handing the same writer to both MultiWriters means two goroutines
+	// writing to it concurrently: a data race, and interleaved half-lines in the log even
+	// when the writer happens to be race-free. A garbled log is worse than none, because
+	// it is read as evidence.
+	safe := &syncWriter{w: logw}
+	c.Stdout = io.MultiWriter(os.Stdout, safe)
+	c.Stderr = io.MultiWriter(os.Stderr, safe)
 	if len(env) > 0 {
 		c.Env = append(os.Environ(), env...)
 	}
 	return c.Run()
+}
+
+// syncWriter serializes concurrent writes to an underlying writer.
+type syncWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (s *syncWriter) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.w.Write(p)
 }
 
 // ExitCode extracts a process exit code from a run error (0 if nil, the child's code if
