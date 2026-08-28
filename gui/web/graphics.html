@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Clip-Art Studio · Revert</title>
+<style>
+  :root {
+    --night:#0a0610; --surface:#17102a; --surface2:#1e1638; --line:#2a2044;
+    --grape:#a24bff; --grape-soft:#c79bff; --blood:#e83b5c; --bone:#f1eaf9; --ash:#a596c2;
+    --ok:#57d38c; --warn:#f5c518;
+  }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  html,body { height:100%; margin:0; }
+  body {
+    background:
+      radial-gradient(60% 45% at 50% -8%, rgba(162,75,255,.18), transparent 60%),
+      linear-gradient(180deg,#0a0610,#0c0716 60%,#0a0610);
+    color:var(--bone); font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    display:flex; flex-direction:column; min-height:100%;
+  }
+  header { padding:20px 24px 8px; display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
+  h1 { margin:0; font-size:20px; letter-spacing:.02em; text-transform:uppercase; font-weight:800; }
+  h1 .vv { color:var(--grape-soft); }
+  .sub { color:var(--ash); font-size:12.5px; }
+  a.back { color:var(--grape-soft); font-size:12.5px; text-decoration:none; border-bottom:1px dotted currentColor; }
+  a.back:hover { color:var(--bone); }
+  main { display:grid; grid-template-columns:minmax(300px,380px) 1fr; gap:16px; padding:6px 24px 24px; flex:1; min-height:0; }
+  @media (max-width:820px){ main { grid-template-columns:1fr; } }
+  .card { border:1px solid var(--line); border-radius:12px; background:rgba(23,16,42,.55); padding:14px; }
+  .card h3 { margin:0 0 3px; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--grape-soft); }
+  .card p.lead { margin:0 0 12px; font-size:12px; color:var(--ash); }
+  .left { display:flex; flex-direction:column; gap:14px; overflow:auto; }
+
+  .drop { border:1.5px dashed var(--line); border-radius:11px; padding:22px 14px; text-align:center;
+    color:var(--ash); font-size:12.5px; cursor:pointer; transition:.15s; background:rgba(18,12,34,.5); }
+  .drop:hover, .drop.over { border-color:var(--grape); color:var(--bone); background:rgba(162,75,255,.10); }
+  .drop b { color:var(--grape-soft); }
+
+  .previews { display:flex; gap:14px; margin-top:14px; align-items:flex-start; }
+  .pv { flex:1; text-align:center; }
+  .pv .box { border:1px solid var(--line); border-radius:9px; background:
+      linear-gradient(45deg,#140e26 25%,transparent 25%,transparent 75%,#140e26 75%),
+      linear-gradient(45deg,#140e26 25%,#0e0a1c 25%,#0e0a1c 75%,#140e26 75%);
+    background-size:14px 14px; background-position:0 0,7px 7px; padding:8px; }
+  .pv img { width:100%; max-width:150px; image-rendering:pixelated; display:block; margin:0 auto; }
+  .pv .cap { font-size:11px; color:var(--ash); margin-top:6px; }
+  .pv .cap b { color:var(--grape-soft); font-weight:600; }
+
+  .seg { display:flex; gap:0; border:1px solid var(--line); border-radius:9px; overflow:hidden; margin-top:4px; }
+  .seg button { flex:1; background:#120c22; color:var(--ash); border:0; padding:8px 6px; font-size:12.5px;
+    cursor:pointer; transition:.15s; font-weight:600; }
+  .seg button.on { background:rgba(162,75,255,.24); color:var(--bone); }
+  .seg button:hover:not(.on) { color:var(--bone); }
+
+  label.fld { display:block; font-size:12px; color:var(--grape-soft); font-weight:600; margin:14px 0 0; letter-spacing:.02em; }
+  input[type=text] { background:#120c22; color:var(--bone); border:1px solid var(--line);
+    border-radius:8px; padding:7px 9px; font-size:12.5px; width:100%; margin-top:5px; }
+  .hint { margin-top:7px; font-size:11px; color:var(--ash); line-height:1.45; }
+
+  button.act { width:100%; border:1px solid var(--grape); background:rgba(162,75,255,.14);
+    color:var(--grape-soft); font-weight:600; padding:9px 10px; border-radius:9px; cursor:pointer;
+    transition:.15s; font-size:13px; margin-top:14px; }
+  button.act:hover:not(:disabled) { background:rgba(162,75,255,.28); color:var(--bone); }
+  button.act:disabled { opacity:.4; cursor:not-allowed; }
+
+  .right { display:flex; flex-direction:column; gap:14px; min-height:0; }
+  .pool { display:flex; gap:8px; align-items:center; font-size:12px; color:var(--ash); flex-wrap:wrap; }
+  .pool .chip { border:1px solid var(--line); border-radius:999px; padding:2px 10px; }
+  .pool .chip b { color:var(--bone); font-weight:600; }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:12px; overflow:auto; padding-right:2px; }
+  .slot { border:1px solid var(--line); border-radius:11px; background:rgba(18,12,34,.55); padding:9px; text-align:center; }
+  .slot.reserved { border-color:rgba(245,197,24,.35); }
+  .slot.altered { border-color:rgba(232,59,92,.4); }
+  .slot .art { border-radius:7px; background:
+      linear-gradient(45deg,#140e26 25%,transparent 25%,transparent 75%,#140e26 75%),
+      linear-gradient(45deg,#140e26 25%,#0e0a1c 25%,#0e0a1c 75%,#140e26 75%);
+    background-size:12px 12px; background-position:0 0,6px 6px; padding:5px; }
+  .slot img { width:100%; image-rendering:pixelated; display:block; }
+  .slot .nm { font-size:12px; color:var(--bone); margin-top:7px; word-break:break-word; font-weight:600; }
+  .slot .meta { font-size:10.5px; color:var(--ash); margin-top:2px; }
+  .slot .kind { font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--grape-soft); }
+  .slot .kind.reserved { color:var(--warn); } .slot .kind.altered { color:#e6899a; }
+  button.rm { margin-top:8px; width:100%; border:1px solid rgba(226,90,110,.45); background:rgba(226,90,110,.10);
+    color:#e6899a; border-radius:7px; padding:5px; font-size:11px; cursor:pointer; }
+  button.rm:hover:not(:disabled) { background:rgba(226,90,110,.24); color:var(--bone); }
+  button.rm:disabled { opacity:.4; cursor:not-allowed; }
+
+  .empty { color:var(--ash); font-size:12.5px; padding:22px 4px; }
+  .log { border:1px solid var(--line); border-radius:11px; background:#070410; padding:10px 12px; margin:0;
+    font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; color:#d7cdea; white-space:pre-wrap;
+    max-height:150px; overflow:auto; }
+  .log.err { border-color:rgba(232,59,92,.5); color:#ffb3c0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Clip-Art <span class="vv">Studio</span></h1>
+  <span class="sub">custom spray tags and wall-slap stickers</span>
+  <a class="back" href="/">&larr; back to Revert</a>
+</header>
+
+<main>
+  <div class="left">
+    <div class="card">
+      <h3>Add artwork</h3>
+      <p class="lead">Drop in any image. It becomes a spray tag you load in Create-A-Graphic, or a sticker you pick in Create-A-Skater.</p>
+
+      <div class="drop" id="drop">
+        <b>Drop an image here</b><br>or click to choose one
+      </div>
+      <input type="file" id="file" accept="image/*" hidden>
+
+      <div class="previews" id="previews" hidden>
+        <div class="pv">
+          <div class="box"><img id="pvSrc" alt="your image"></div>
+          <div class="cap">your image</div>
+        </div>
+        <div class="pv">
+          <div class="box"><img id="pvGame" alt="in game"></div>
+          <div class="cap"><b>in game</b></div>
+        </div>
+      </div>
+      <div class="hint" id="pvHint" hidden>
+        The right-hand picture is the real thing: your image encoded to the game's
+        64&times;64 sprite and read back, so the colour reduction is visible before you commit.
+      </div>
+
+      <label class="fld">Use it as</label>
+      <div class="seg" id="kind">
+        <button data-kind="tag" class="on">Spray tag</button>
+        <button data-kind="sticker">Sticker</button>
+      </div>
+
+      <label class="fld" for="name">Name</label>
+      <input type="text" id="name" placeholder="taken from the filename" maxlength="15">
+      <div class="hint">Up to 15 letters, numbers and spaces. This is the name you pick in game.</div>
+
+      <button class="act" id="go" disabled>Add to my game</button>
+      <pre class="log" id="log" hidden></pre>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="card" style="display:flex;flex-direction:column;min-height:0;flex:1">
+      <h3>What's in your game</h3>
+      <p class="lead">Every slot your own artwork occupies. Removing one puts the original clip-art back.</p>
+      <div class="pool" id="pool"></div>
+      <div style="height:12px"></div>
+      <div class="grid" id="grid"></div>
+      <div class="empty" id="empty" hidden>No artwork of yours in the game yet. Add an image on the left and it shows up here.</div>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+let picked = null;      // the chosen File
+let busy = false;
+// Thumbnail URLs are per-slot and never change, so a browser reuses the image it
+// already has and keeps showing the art a slot USED to hold after an import or a
+// removal. Server-side no-store does not stop the in-memory reuse, so every
+// refresh stamps a new token onto the URLs.
+let rev = 0;
+
+function setBusy(b) {
+  busy = b;
+  $('#go').disabled = b || !picked;
+  document.querySelectorAll('button.rm').forEach(x => x.disabled = b);
+}
+function say(msg, isErr) {
+  const el = $('#log');
+  el.hidden = false;
+  el.textContent = msg;
+  el.classList.toggle('err', !!isErr);
+}
+function kind() { return $('#kind button.on').dataset.kind; }
+
+// ── choosing an image ───────────────────────────────────────────────────────
+$('#drop').addEventListener('click', () => $('#file').click());
+$('#file').addEventListener('change', e => { if (e.target.files[0]) choose(e.target.files[0]); });
+['dragenter','dragover'].forEach(t => $('#drop').addEventListener(t, e => {
+  e.preventDefault(); $('#drop').classList.add('over');
+}));
+['dragleave','drop'].forEach(t => $('#drop').addEventListener(t, e => {
+  e.preventDefault(); $('#drop').classList.remove('over');
+}));
+$('#drop').addEventListener('drop', e => {
+  const f = e.dataTransfer.files[0];
+  if (f) choose(f);
+});
+
+async function choose(f) {
+  picked = f;
+  $('#pvSrc').src = URL.createObjectURL(f);
+  $('#previews').hidden = false;
+  $('#pvHint').hidden = false;
+  $('#go').disabled = busy;
+  if (!$('#name').value) {
+    $('#name').placeholder = f.name.replace(/\.[^.]+$/, '').slice(0, 15);
+  }
+  // Ask the toolkit what the game will actually draw.
+  const fd = new FormData();
+  fd.append('image', f);
+  try {
+    const r = await fetch('/api/cag/preview', { method:'POST', body: fd });
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    $('#pvGame').src = URL.createObjectURL(await r.blob());
+    $('#log').hidden = true;
+  } catch (err) {
+    say('Could not render a preview: ' + err.message, true);
+  }
+}
+
+$('#kind').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  $('#kind button.on').classList.remove('on');
+  b.classList.add('on');
+});
+
+// ── importing ───────────────────────────────────────────────────────────────
+$('#go').addEventListener('click', async () => {
+  if (!picked) return;
+  setBusy(true);
+  say('Adding ' + picked.name + ' ...');
+  const fd = new FormData();
+  fd.append('image', picked);
+  fd.append('kind', kind());
+  if ($('#name').value.trim()) fd.append('name', $('#name').value.trim());
+  try {
+    const r = await fetch('/api/cag/import', { method:'POST', body: fd });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    say(j.log || 'Done.');
+    picked = null;
+    $('#file').value = '';
+    $('#previews').hidden = true;
+    $('#pvHint').hidden = true;
+    $('#name').value = '';
+    await load();
+  } catch (err) {
+    say('That did not work: ' + err.message, true);
+  } finally {
+    setBusy(false);
+  }
+});
+
+async function remove(name) {
+  if (!confirm('Remove "' + name + '" and put the original clip-art back?')) return;
+  setBusy(true);
+  say('Removing ' + name + ' ...');
+  const fd = new FormData();
+  fd.append('name', name);
+  try {
+    const r = await fetch('/api/cag/remove', { method:'POST', body: fd });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    say(j.log || 'Removed.');
+    await load();
+  } catch (err) {
+    say('Could not remove it: ' + err.message, true);
+  } finally {
+    setBusy(false);
+  }
+}
+
+// ── the slot grid ───────────────────────────────────────────────────────────
+async function load() {
+  rev++;
+  let slots;
+  try {
+    const r = await fetch('/api/cag/list');
+    if (!r.ok) throw new Error((await r.json()).error || r.statusText);
+    slots = await r.json();
+  } catch (err) {
+    $('#pool').innerHTML = '';
+    $('#grid').innerHTML = '';
+    $('#empty').hidden = false;
+    $('#empty').textContent = 'Could not read your game: ' + err.message;
+    return;
+  }
+
+  // What deserves a tile is artwork, not bookkeeping. A slot holding untouched
+  // stock art that some tag happens to compose is not the user's art and does
+  // not belong in this grid; it is only unavailable, which the summary says.
+  // A slot holding CUSTOM art we hold no source for is different: a rebuild
+  // will reset it, so it is shown and flagged.
+  const mine     = slots.filter(s => s.kind);
+  const unmanaged = slots.filter(s => !s.kind && s.modified && (s.reservedBy || []).length);
+  const orphaned = slots.filter(s => !s.kind && s.modified && !(s.reservedBy || []).length);
+  const heldStock = slots.filter(s => !s.kind && !s.modified && (s.reservedBy || []).length);
+  const shown = mine.concat(unmanaged, orphaned);
+
+  const heldNote = heldStock.length
+    ? ' \u00b7 ' + heldStock.map(s => s.slot + ' (' + (s.reservedBy || []).join(' + ') + ')').join(', ')
+    : '';
+  $('#pool').innerHTML =
+    '<span class="chip"><b>' + mine.length + '</b> yours</span>' +
+    (heldStock.length ? '<span class="chip" title="Original clip-art your tags are built from' + esc(heldNote) +
+      '. Nothing of yours is here, but these slots stay put so those tags keep looking right."><b>' +
+      heldStock.length + '</b> original art your tags use</span>' : '') +
+    (unmanaged.length ? '<span class="chip"><b>' + unmanaged.length + '</b> unmanaged</span>' : '') +
+    (orphaned.length ? '<span class="chip"><b>' + orphaned.length + '</b> altered, no source</span>' : '') +
+    '<span class="chip"><b>' + (slots.length - mine.length - heldStock.length - unmanaged.length - orphaned.length) +
+      '</b> free of ' + slots.length + '</span>';
+
+  $('#empty').hidden = shown.length > 0;
+  $('#grid').innerHTML = shown.map(s => {
+    const cls = s.kind ? '' : ((s.reservedBy || []).length ? 'reserved' : 'altered');
+    const label = s.kind ? s.kind : ((s.reservedBy || []).length ? 'not managed' : 'altered');
+    const title = s.name || s.slot;
+    const meta = s.kind
+      ? s.slot + ' \u00b7 ' + esc(s.source)
+      : ((s.reservedBy || []).length
+          ? s.slot + ' \u00b7 used by ' + esc((s.reservedBy || []).join(' + ')) + ', but no source is kept, so a rebuild will reset it'
+          : s.slot + ' \u00b7 changed by something else, with no source kept');
+    return '<div class="slot ' + cls + '">' +
+      '<div class="art"><img loading="lazy" src="/api/cag/sprite?slot=' + encodeURIComponent(s.slot) + '&v=' + rev + '" alt="' + esc(title) + '"></div>' +
+      '<div class="kind ' + cls + '">' + label + '</div>' +
+      '<div class="nm">' + esc(title) + '</div>' +
+      '<div class="meta">' + meta + '</div>' +
+      (s.kind ? '<button class="rm" data-name="' + esc(s.source) + '">Remove</button>' : '') +
+      '</div>';
+  }).join('');
+
+  $('#grid').querySelectorAll('button.rm').forEach(b =>
+    b.addEventListener('click', () => remove(b.dataset.name)));
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+load();
+</script>
+</body>
+</html>

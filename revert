@@ -8,12 +8,16 @@
 #   revert acquire-game-data --iso|--url   turn YOUR THUG2 copy into the pristine base
 #   revert acquire-hq [audio|textures]     fetch the optional HQ audio / textures packs
 #   revert build [--fast] [--only a,b]     build the edition (reproducible)
-#   revert run <vanilla|qol|online> [...]  launch a lane (--soundtrack, --glyphs, --gpu)
+#   revert run <vanilla|qol|online> [...]  launch a lane (--soundtrack, --glyphs, --gpu,
+#                                          --vertical / --vertical-fill / --cutscene /
+#                                          --res WxH for Shorts/Reels clips)
 #   revert gui                             launch the click-to-install web UI (no terminal)
 #   revert install-desktop                 add an app-menu launcher for the GUI
 #   revert calibrate-controller            (Deck) detect + bind the controller pad GUID
 #   revert configure-controller            bind ANY controller via THUG2's own Launcher
-#   revert tag <image> [...]               make an in-game Create-A-Graphic tag
+#   revert tag <image> [--install]         make an in-game Create-A-Graphic spray tag
+#   revert sticker <image> [--install]     make a Create-A-Skater wall-slap sticker
+# X
 #   revert update [--check]                update to the latest release + rebuild
 #   revert uninstall [--purge]             remove Revert (--purge = also saves/Go/packages)
 #   revert status [--json]                 report lifecycle state (used by the GUI)
@@ -117,7 +121,7 @@ cmd_doctor() {
   else
     command -v go >/dev/null && note "thugkit not built yet (will build from source)" || { bad "no thugkit binary and no go toolchain"; fail=1; }
   fi
-  command -v python3 >/dev/null && ok "python3 (optional CAS asset steps)" || note "python3 absent (panty/sticker CAS steps skipped)"
+  command -v python3 >/dev/null && ok "python3 (optional CAS asset steps)" || note "python3 absent (optional CAS recolour steps skipped)"
 
   echo "Controller:"
   python3 -c 'import evdev' 2>/dev/null && ok "python3-evdev (trigger bridge)" || note "python3-evdev absent (L2/R2 bridge unavailable)"
@@ -158,7 +162,9 @@ ensure_thugkit() {
 }
 
 # Python CAS asset post-pass — the steps that live outside the .ns pipeline and Go
-# core (texture recolours, licensed model/deck blobs, stickers). Presence-gated;
+# core (texture recolours, licensed model/deck blobs). Stickers are NOT here: they
+# share the Create-A-Graphic clip-art pool with custom tags, so both are allocated
+# together by the Go core during the build. Presence-gated;
 # never required for a clean build. Mirrors rebuild-playable.sh apply_cas_asset_mods.
 cas_post_pass() {  # $1 = edition dir
   local dir="$1" save="${REVERT_ROOT}/tools/save"
@@ -168,14 +174,13 @@ cas_post_pass() {  # $1 = edition dir
   # CAS post-pass is cosmetic and never required for a bootable build. (revert setup installs
   # them; this guards a partial/skipped setup.)
   if ! python3 -c 'import numpy, PIL' 2>/dev/null; then
-    note "python numpy/Pillow missing — skipping CAS sticker/recolour pass (install: revert setup, or 'pip install numpy pillow')"
+    note "python numpy/Pillow missing — skipping CAS recolour pass (install: revert setup, or 'pip install numpy pillow')"
     return 0
   fi
   log "CAS asset post-pass (python)"
   python3 "$save/apply_panty_color.py" "$dir" 130 50 190 || true
   [[ -d "$DECKS_BLOB" ]]  && python3 "$save/apply_deck_pack.py" "$dir" "$DECKS_BLOB" || true
   [[ -d "$PLAYAS_BLOB" ]] && python3 "$save/apply_playas_models.py" "$dir" "$PLAYAS_BLOB" || true
-  [[ -d "$save/stickers" ]] && python3 "$save/apply_stickers.py" "$dir" || true
 }
 
 # Install the edition's in-game movies (Skatepark Project credits + the MOD OPTIONS
@@ -248,11 +253,12 @@ cmd_build() {
   local glyph_arg=(); [[ -f "${GLYPHFIX_ASI:-}" ]] && glyph_arg=(--glyphfix "$GLYPHFIX_ASI")
   local kbd_arg=();   [[ -f "${KEYBOARDGRID_ASI:-}" ]] && kbd_arg=(--keyboardgrid "$KEYBOARDGRID_ASI")
   local tags_arg=();  [[ -d "$TAGS_DIR" ]] && tags_arg=(--tags "$TAGS_DIR")
+  local stk_arg=();   [[ -d "${STICKERS_DIR:-}" ]] && stk_arg=(--stickers "$STICKERS_DIR")
 
   log "build lane=$lane${fast:+ (fast)} -> $edition"
   "$THUGKIT" build "$edition" --pristine "$PRISTINE_DIR" --mods "$MODS_DIR" \
     $fast "${nocd_arg[@]}" "${wsfix_arg[@]}" "${hq_arg[@]}" "${hud_arg[@]}" \
-    "${glyph_arg[@]}" "${kbd_arg[@]}" "${tags_arg[@]}" "${only_arg[@]}" || err "thugkit build failed"
+    "${glyph_arg[@]}" "${kbd_arg[@]}" "${tags_arg[@]}" "${stk_arg[@]}" "${only_arg[@]}" || err "thugkit build failed"
 
   cas_post_pass "$edition"
   install_credits_movies "$edition"
@@ -267,10 +273,30 @@ cmd_run() {
   exec "$r" "$@"
 }
 
-# ---- tag: passthrough to the Go tool ------------------------------------------
-cmd_tag() {
+# ---- tag / sticker / cag: the Create-A-Graphic clip-art pool ---------------------
+# Both importers share one 115-slot pool, so both go through the same Go core with
+# the same drop folders and the same pristine reference. Passing them here is what
+# lets the allocator see everything that is already claimed.
+cag_args() {
   [[ -x "$THUGKIT" ]] || err "thugkit binary missing ($THUGKIT) — run a build first"
-  exec "$THUGKIT" tag "$@"
+  local edition="$EDITION_QOL"
+  printf '%s\0' --gamedir "$edition" --pristine "$PRISTINE_DIR" \
+                 --tags "$TAGS_DIR" --stickers "${STICKERS_DIR:-}"
+}
+
+cmd_tag() {
+  local -a a=(); mapfile -d "" -t a < <(cag_args)
+  exec "$THUGKIT" tag "$@" "${a[@]}"
+}
+
+cmd_sticker() {
+  local -a a=(); mapfile -d "" -t a < <(cag_args)
+  exec "$THUGKIT" sticker "$@" "${a[@]}"
+}
+
+cmd_cag() {
+  local -a a=(); mapfile -d "" -t a < <(cag_args)
+  exec "$THUGKIT" cag "$@" "${a[@]}"
 }
 
 # ---- stubs (implemented in later stages) --------------------------------------
@@ -531,6 +557,8 @@ case "${1:-help}" in
   calibrate-controller) shift; cmd_calibrate "$@";;
   configure-controller|controls) shift; cmd_configure_controller "$@";;
   tag)               shift; cmd_tag "$@";;
+  sticker)           shift; cmd_sticker "$@";;
+  cag|graphics)      shift; cmd_cag "$@";;
   help|-h|--help)    usage 0;;
   *) echo "revert: unknown command '${1:-}'" >&2; usage 1;;
 esac

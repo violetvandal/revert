@@ -130,7 +130,8 @@ install_packages_apt() {
   fi
   local pkgs=(
     winetricks p7zip-full msitools cabextract python3-evdev
-    # numpy + Pillow: the build's CAS asset post-pass (custom stickers / texture recolour)
+    # numpy + Pillow: the build's CAS asset post-pass (part recolours, licensed decks and
+    # guest models). Custom tags and stickers do NOT need this — they are in the Go core.
     # imports them via png2img; without them that step throws instead of applying.
     python3-numpy python3-pil
     # 32-bit X libs — without these the win32 prefix fails at nodrv_CreateWindow.

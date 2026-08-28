@@ -102,6 +102,7 @@ func Build(c *Conf, o BuildOptions) error {
 		note("  revert.conf.local:  all | none | a list, e.g. MAC_VV_ASI=\"hudfix\"")
 	}
 	args = appendFlagIfDir(args, "--tags", c.Path("TAGS_DIR"))
+	args = appendFlagIfDir(args, "--stickers", c.Path("STICKERS_DIR"))
 	if o.Only != "" {
 		args = append(args, "--only", o.Only)
 	}

@@ -94,7 +94,12 @@ No installed folder to point at? `revert acquire-game-data --url <link>` downloa
 images. Revert provides no game data and no sources — `--url` is just a downloader.
 
 `revert run qol --soundtrack radio` plays the royalty-free "Violet Vandal Radio"
-soundtrack (stream-safe). `revert tag <image>` imports a custom Create-A-Graphic tag.
+soundtrack (stream-safe). `revert tag <image>` imports your own artwork as a
+Create-A-Graphic spray tag and `revert sticker <image>` as a Create-A-Skater wall slap;
+both preview first and only change the game when you add `--install`. `revert cag list`
+shows which clip-art slots your imports hold, and `revert cag remove <name>` puts the
+original artwork back. The same thing with pictures instead of a terminal:
+`revert gui`, then Clip-Art Studio.
 `revert run qol --glyphs playstation` themes the on-screen trick-combo button prompts
 (Xbox / PlayStation / GameCube / keyboard; `auto` picks Xbox on Steam Deck). You can also
 change it in-game under **Game Options → MOD OPTIONS → Button Glyphs**.

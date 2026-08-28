@@ -18,10 +18,11 @@ revert (bash dispatcher)
   `build` subcommand mirrors the pristine base, installs the no-CD exe, applies the
   WidescreenFix (the load-bearing `dinput8.dll` → **`winmm.dll`** rename, so Wine's
   native DirectInput stays for the controller), runs the mod apply (`apply.Run`),
-  installs custom tags (`tag.Run`), copies the HUD-fix + glyph-fix `.asi`s, overlays the
-  HQ A/V pack, and optionally bakes a default soundtrack. **No `os/exec`** — it never shells
-  out, so the binary stays static. Reuses the existing `apply`, `tag`, `prx`, `imgxbx`,
-  `grf` packages.
+  re-derives the Create-A-Graphic clip-art pool from the drop folders (`cag.BuildPlan` +
+  `cag.Apply`, which allocate custom tags and wall-slap stickers out of one shared slot
+  pool), copies the HUD-fix + glyph-fix `.asi`s, overlays the HQ A/V pack, and optionally
+  bakes a default soundtrack. **No `os/exec`** — it never shells out, so the binary stays
+  static. Reuses the existing `apply`, `cag`, `prx`, `imgxbx`, `grf` packages.
 - **`share/run/revert-run.sh` (bash)** — GE-Proton launch, lanes defined entirely in
   `revert.conf` (`LANE_<NAME>_{DIR,PREFIX,EXE,ENV,HOOKS,SOUNDTRACK}`). Hooks: soundtrack
   swap (engine can't toggle live) and the evdev trigger bridge. Also resolves the button-glyph
@@ -51,9 +52,13 @@ the Ultimate ASI Loader (our `winmm.dll`) alongside the stock WidescreenFix:
 
 ## Why the split
 Archive extraction (ISO/MSI/7z) and the optional **Python CAS asset steps**
-(panty recolour, stickers, licensed decks/playas) are the **bash orchestrator's**
-job — the Go core takes already-extracted directories. This keeps the Go binary
-zero-dep and cross-platform while the build still reproduces the full edition.
+(panty recolour, licensed decks/playas) are the **bash orchestrator's** job — the
+Go core takes already-extracted directories. This keeps the Go binary zero-dep and
+cross-platform while the build still reproduces the full edition.
+
+Custom tags and stickers are **not** in that Python layer, though stickers once
+were. Both are imported into one shared clip-art slot pool, so allocating them
+separately let them claim the same slot; the Go `cag` package now does both.
 
 ## Cross-repo boundary (the one hard seam)
 `tools/thugkit/` and `mods/` are **independent git repos**, gitignored by the root

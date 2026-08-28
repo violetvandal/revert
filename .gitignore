@@ -70,6 +70,14 @@ tools/save/renders/
 tools/save/grf_work/
 tools/save/io_thps_scene/
 tools/save/stickers/
+# Tag drop folder: the SOURCE images are the user's own artwork (often third-party)
+# and this tree is curated-exported to a public repo, so only the seeded persona
+# .GRF is tracked. Same reasoning as tools/save/stickers/ above.
+tools/save/tags/*.png
+tools/save/tags/*.jpg
+tools/save/tags/*.jpeg
+tools/save/tags/*.bmp
+tools/save/tags/*.gif
 tools/bink/rad/
 tools/bink/radio/bik/
 

@@ -47,21 +47,33 @@ game's script files identically, which is what makes injecting a modified script
 `apply` step compiles `.ns` → `.qb` in-process (no external toolchain at build time). Known
 compiler limitations are tracked in the fork's `LIMITATIONS.md`.
 
-## `.GRF` / CAGR tags (`tag/`, `grf/`, `imgxbx/`)
+## `.GRF` / CAGR: the clip-art pool (`cag/`, `grf/`, `imgxbx/`) { #clip-art-pool }
 
-The Create-A-Graphic custom-tag path turns an image into an in-game spray tag:
+Turning an image into an in-game spray tag or wall-slap sticker:
 
 ```mermaid
 flowchart LR
   img[PNG/JPG] --> x[imgxbx: encode to .img.xbx CAGR sprite]
-  x --> inj[inject into cagpieces.prx]
-  inj --> grf[write checksummed .GRF]
+  x --> slot[cag: claim a free slot in the shared pool]
+  slot --> inj[write the loose sprite + the cagpieces.prx entry]
+  inj --> grf[tags only: write a checksummed .GRF]
 ```
 
-- `imgxbx/` encodes the image to an Xbox-format `.img.xbx` CAGR sprite.
-- `grf/` reads and writes the `.GRF` container byte-exactly, including its checksum.
-- `tag/` is the orchestrator (`thugkit tag <image> [--install]`), a Go port of the reference
-  Python tag importer that produces byte-identical output.
+- `imgxbx/` **encodes** an image to an Xbox-format `.img.xbx` CAGR sprite (palettized,
+  swizzled, stored bottom-up) and **decodes** one back. Decode is validated against the
+  reference Python decoder on all 371 stock sprites.
+- `grf/` **reads and writes** the `.GRF` container byte-exactly, checksum included. The
+  reader is what makes slot ownership knowable: without it nothing could tell which clip-art
+  an existing tag draws, and a new import would silently take a slot out from under it.
+- `cag/` owns the pool: allocation, reservations, the claim record, and restoring a slot.
+  Entry points are `thugkit tag|sticker <image> [--install]` and `thugkit cag
+  list|remove|restore|apply`.
+
+!!! warning "Decode returns `NRGBA`, not `RGBA`"
+    `.img.xbx` stores **straight** alpha. Go's `image.RGBA` is alpha-**premultiplied**, so
+    decoding into one zeroes the colour of every fully transparent pixel. The image still
+    looks right in a thumbnail and is wrong in the file, which is exactly the kind of bug
+    that survives a visual check.
 
 ## The boot ceiling
 

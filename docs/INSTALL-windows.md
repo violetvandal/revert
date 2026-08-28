@@ -83,6 +83,6 @@ reopen `revert-gui.exe`. The GUI has the same two buttons under **Update**.
 Install THUG Pro (`THUGProSetup.exe`, a native Windows app), then run `revert.exe run online`.
 
 ## Cosmetic extras (optional)
-The core edition needs no Python. For the optional cosmetic extras (recolors, stickers, licensed
-decks), install Python 3 from python.org and run `pip install pillow numpy`; the next `revert.exe
-build` picks them up.
+The core edition needs no Python, and neither do your own tags and stickers. For the remaining
+optional cosmetic extras (part recolors, licensed decks and guest models), install Python 3 from
+python.org and run `pip install pillow numpy`; the next `revert.exe build` picks them up.

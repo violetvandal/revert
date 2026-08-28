@@ -16,7 +16,8 @@ revert (bash dispatcher)
 ├── acquire-hq       →  share/setup/revert-acquire-hq.sh fetch-or-BYO HQ audio/video packs
 ├── build            →  tools/thugkit/thugkit build      (Go core) + Python CAS post-pass
 ├── run <lane>       →  share/run/revert-run.sh          GE-Proton launch, three lanes
-├── tag              →  thugkit tag                       custom Create-A-Graphic tags
+├── tag / sticker    →  thugkit tag|sticker               import your own artwork
+├── cag              →  thugkit cag                       the clip-art slot pool
 ├── gui / install-desktop                                 the graphical installer + app entry
 ├── calibrate-controller / configure-controller           pad setup
 └── update / uninstall / status / version
@@ -30,11 +31,12 @@ lives in `revert.conf`: paths, the Wine runtime, and the `LANE_*` / `EDITION_*` 
 ### 1. `thugkit` (Go, `tools/thugkit/`)
 
 The zero-dependency, cross-platform builder. Its `build` subcommand mirrors the pristine
-base, installs the no-CD exe, applies the WidescreenFix, runs the mod apply, installs custom
-tags and the HUD/glyph `.asi`s, overlays the HQ A/V pack, and optionally bakes a default
-soundtrack. It **never shells out** (no `os/exec`), so the binary stays static and
-cross-compiles for Windows, Linux, and the Deck. It reuses its own `apply`, `tag`, `prx`,
-`imgxbx`, and `grf` packages. See [Codecs](codecs.md).
+base, installs the no-CD exe, applies the WidescreenFix, runs the mod apply, re-derives the
+Create-A-Graphic clip-art pool (custom tags **and** wall-slap stickers), installs the
+HUD/glyph `.asi`s, overlays the HQ A/V pack, and optionally bakes a default soundtrack. It
+**never shells out** (no `os/exec`), so the binary stays static and cross-compiles for
+Windows, Linux, and the Deck. It reuses its own `apply`, `cag`, `prx`, `imgxbx`, and `grf`
+packages. See [Codecs](codecs.md).
 
 ### 2. `share/run/revert-run.sh` (bash)
 
@@ -52,9 +54,14 @@ GE-Proton + DXVK + winetricks + the `winmm` override + controller setup across t
 ### Why the split
 
 Archive extraction (ISO/MSI/7z) and the optional **Python CAS asset steps** (part recolours,
-stickers, licensed decks and guest models) are the bash orchestrator's job. The Go core
-takes already-extracted directories. This keeps the Go binary zero-dependency and
-cross-platform while the build still reproduces the full edition.
+licensed decks and guest models) are the bash orchestrator's job. The Go core takes
+already-extracted directories. This keeps the Go binary zero-dependency and cross-platform
+while the build still reproduces the full edition.
+
+Custom tags and stickers are deliberately **not** in that Python layer, though stickers used
+to be. Both are imported into one shared clip-art slot pool, so allocating them in two
+different places let them claim the same slot; they now go through the Go `cag` package
+together. See [Codecs](codecs.md#clip-art-pool).
 
 ## Custom `.asi` mods (`tools/{hudfix,glyphfix}/`)
 
@@ -96,7 +103,8 @@ internal/core     conf parser + doctor/status/build/run/setup/acquire/soundtrack
 The single rule that keeps the proven Linux/Deck path safe: **on Linux every core command
 delegates to the bash dispatcher** (`internal/core/delegate.go`), so bash stays
 authoritative; **on Windows the commands run natively**. The seams are unchanged: `build`
-still shells to `thugkit`, `tag` passes through, `run` launches `THUG2.exe` directly.
+still shells to `thugkit`, `tag` / `sticker` / `cag` pass through, `run` launches
+`THUG2.exe` directly.
 
 ## Legacy
 

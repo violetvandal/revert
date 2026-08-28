@@ -83,7 +83,7 @@ func Doctor(c *Conf) error {
 	} else if _, err := exec.LookPath("python3"); err == nil {
 		ok("python3 (optional CAS asset steps)")
 	} else {
-		note("python absent (panty/sticker/deck CAS steps skipped; core edition still builds)")
+		note("python absent (panty/deck CAS steps skipped; core edition still builds)")
 	}
 
 	fmt.Println("Game data (you must own THUG2):")

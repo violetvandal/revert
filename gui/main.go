@@ -41,6 +41,7 @@ var webFS embed.FS
 var allowed = map[string]bool{
 	"doctor": true, "setup": true, "acquire-game-data": true, "acquire-hq": true,
 	"build": true, "run": true, "update": true, "tag": true, "help": true,
+	"sticker": true, "cag": true,
 	"calibrate-controller": true, "configure-controller": true, "uninstall": true,
 }
 
@@ -173,6 +174,11 @@ func main() {
 	mux.HandleFunc("/api/install/start", installStartHandler)
 	mux.HandleFunc("/api/install/stream", installStreamHandler)
 	mux.HandleFunc("/api/heartbeat", heartbeatHandler)
+	mux.HandleFunc("/api/cag/list", cagListHandler)
+	mux.HandleFunc("/api/cag/preview", cagPreviewHandler)
+	mux.HandleFunc("/api/cag/sprite", cagSpriteHandler)
+	mux.HandleFunc("/api/cag/import", cagImportHandler)
+	mux.HandleFunc("/api/cag/remove", cagRemoveHandler)
 
 	// Bind to loopback on a free port (local, single-user; never exposed).
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

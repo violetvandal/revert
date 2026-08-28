@@ -63,10 +63,22 @@ while [[ $# -gt 0 ]]; do
     --soundtrack) SOUNDTRACK="${2:-original}"; shift 2;;
     --glyphs)     GLYPHS="${2:-auto}"; shift 2;;
     --gpu)        GPU_FILTER="${2:-}"; shift 2;;
+    --res)        RUN_RES="${2:-}"; shift 2;;
+    --vertical)   RUN_RES="${RECORD_RES:-2240x1680}"; shift;;
+    --vertical-fill) RUN_RES="${RECORD_RES_FILL:-972x1728}"; shift;;
+    --cutscene)   RUN_RES="${RECORD_RES_FILL:-972x1728}"; RUN_CUTSCENE=1; shift;;
     --) shift; break;;
     *) break;;
   esac
 done
+
+# Validate --res HERE, not at launch time: the hooks below tear down the wineserver and
+# kill a running THUG2, so a typo'd resolution must fail before any of that happens.
+if [[ -n "${RUN_RES:-}" ]]; then
+  [[ "$RUN_RES" =~ ^([0-9]{3,5})x([0-9]{3,5})$ ]] \
+    || err "--res wants WIDTHxHEIGHT (e.g. --res 1296x1728), got '$RUN_RES'"
+  RES_W="${BASH_REMATCH[1]}"; RES_H="${BASH_REMATCH[2]}"
+fi
 
 [[ -x "$GE_DIR/bin/wine" ]] || err "GE-Proton wine missing: $GE_DIR (run: revert setup)"
 [[ -d "$DIR" ]] || err "lane dir missing: $DIR (run: revert build, or revert setup for online)"
@@ -74,7 +86,7 @@ done
 # wine environment
 export WINEPREFIX="$PREFIX"
 export WINEARCH="$WINEARCH"
-export WINEDEBUG="-all"
+export WINEDEBUG="${WINEDEBUG:--all}"   # default silent; honor a caller override for debugging
 export PATH="$GE_DIR/bin:$PATH"
 [[ -n "$LANE_ENV" ]] && export "${LANE_ENV?}"   # e.g. WINEDLLOVERRIDES=mscoree=b
 
@@ -133,6 +145,7 @@ bridge_pid=""
 MANAGE_SERVER=0; [[ "$PREFIX" == "$PREFIX_MAIN" ]] && MANAGE_SERVER=1
 
 cleanup() {
+  [[ -n "${WSFIX_INI_SAVED:-}" ]] && mv -f "$WSFIX_INI_SAVED" "$WSFIX_INI" 2>/dev/null || true
   [[ -n "$bridge_pid" ]] && kill "$bridge_pid" 2>/dev/null || true
   pkill -f 'thug2-trigger-bridge.py' 2>/dev/null || true
   pkill -f 'thug2-pad-mirror.py'     2>/dev/null || true
@@ -243,6 +256,52 @@ run_hook() {
 IFS=',' read -ra _hooks <<< "$HOOKS"
 for h in "${_hooks[@]}"; do run_hook "$h"; done
 
+# recording resolution ---------------------------------------------------------
+# `--res WxH` / `--vertical` renders the game at an arbitrary shape for clip capture.
+# Vertical video wants the game rendered TALL, not cropped out of a 32:9 frame: a
+# native portrait render keeps the corner HUD inside the picture and spends every
+# pixel on the shot instead of throwing three quarters of them away.
+#
+# Two settings have to agree, which is why this is one flag and not two:
+#   - the widescreen fix's ResX/ResY, i.e. what the game renders
+#   - a Wine virtual desktop of the same size, i.e. something that CAN be that shape.
+#     The panel has no portrait mode, so there is nothing to go fullscreen into.
+#
+# Sizes are X pixels. Under a scaled XWayland (KWin: kwinrc [Xwayland] Scale) the
+# window lands on screen at size/scale, so on a 1.2 scale 1296x1728 arrives as
+# 1080x1440 physical, matching the vertical scene's game box 1:1.
+WINE_LAUNCH=("$EXE")
+if [[ -n "${RUN_RES:-}" ]]; then
+  WSFIX_INI="$DIR/scripts/TonyHawksUnderground2.WidescreenFix.ini"
+  if [[ -f "$WSFIX_INI" ]]; then
+    # Restored by the EXIT trap, so a recording run never leaves the normal lanes
+    # rendering at clip size.
+    WSFIX_INI_SAVED="$(mktemp)"; cp -a "$WSFIX_INI" "$WSFIX_INI_SAVED"
+    sed -i -E "s/^[[:space:]]*ResX[[:space:]]*=.*/ResX = $RES_W/;
+               s/^[[:space:]]*ResY[[:space:]]*=.*/ResY = $RES_H/" "$WSFIX_INI"
+    log "render resolution -> ${RES_W}x${RES_H} (widescreen fix; restored on exit)"
+  else
+    log "(no widescreen fix ini in $DIR/scripts — virtual desktop only)"
+  fi
+  # Recording HUD defaults from revert.conf. Only set what the caller has not already
+  # set, so `VV_HUD_SCORE_UP=0.1 revert run ...` still overrides for a one-off run.
+  if [[ -n "${RUN_CUTSCENE:-}" ]]; then
+    # Cutscene mode: canvas spans the whole frame so the letterbox bars sit at the frame
+    # edges instead of across the middle. Costs the gameplay HUD, which clips at this scale.
+    : "${VV_HUD_FILL:=${RECORD_HUD_CUTSCENE_FILL:-2.37}}"
+    : "${VV_HUD_BOTTOM:=${RECORD_HUD_CUTSCENE_BOTTOM:-1.0}}"
+    log "cutscene mode: HUD canvas fills the frame (gameplay HUD will clip)"
+  fi
+  : "${VV_HUD_FILL:=${RECORD_HUD_FILL:-1}}"
+  : "${VV_HUD_SCORE_UP:=${RECORD_HUD_SCORE_UP:-0.18}}"
+  : "${VV_HUD_TRICK:=${RECORD_HUD_TRICK:-parent}}"
+  : "${VV_HUD_BOTTOM:=${RECORD_HUD_BOTTOM:-0.88}}"
+  export VV_HUD_FILL VV_HUD_SCORE_UP VV_HUD_TRICK VV_HUD_BOTTOM
+  log "hud -> fill=$VV_HUD_FILL score_up=$VV_HUD_SCORE_UP trick=$VV_HUD_TRICK bottom=$VV_HUD_BOTTOM"
+
+  WINE_LAUNCH=(explorer "/desktop=thug2-record,${RES_W}x${RES_H}" "$EXE")
+fi
+
 # launch -----------------------------------------------------------------------
 # NOT `exec` — we must stay as the parent so the EXIT trap runs when the game quits
 # (kills the input bridge + settles the wineserver). `exec` here silently orphaned
@@ -267,7 +326,7 @@ if : > "$RUN_LOG" 2>/dev/null; then
     echo "# ---- wine output below ----"
   } >> "$RUN_LOG"
   rc=0
-  "$GE_DIR/bin/wine" "$EXE" "$@" \
+  "$GE_DIR/bin/wine" "${WINE_LAUNCH[@]}" "$@" \
     > >(tee -a "$RUN_LOG") \
     2> >(tee -a "$RUN_LOG" >&2) || rc=$?
   # The tee subshells are async; give them a moment to flush before anything reads the
@@ -277,7 +336,7 @@ if : > "$RUN_LOG" 2>/dev/null; then
   echo "# ---- exit code $rc ----" >> "$RUN_LOG"
 else
   log "(could not write $RUN_LOG — running without a log)"
-  rc=0; "$GE_DIR/bin/wine" "$EXE" "$@" || rc=$?
+  rc=0; "$GE_DIR/bin/wine" "${WINE_LAUNCH[@]}" "$@" || rc=$?
 fi
 
 log "game exited (code $rc) — cleaning up"

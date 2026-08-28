@@ -54,13 +54,24 @@ Community HQ textures for the classic levels (`hq-level-textures`, `optional=tru
 | `DJscn.prx` | 1.01 → **3.56 MB** (Downhill Jam) |
 | `SCscn.prx` | 1.27 → **4.22 MB** (School) |
 
-## 5. Custom stickers + tags
+## 5. Your own artwork: tags + stickers
+Anything you drop into `tools/save/tags/` or `tools/save/stickers/` is imported on every
+build. Both kinds share one pool of Create-A-Graphic clip-art slots (`grap_1`..`grap_115`):
+stickers take slots from the bottom up so they appear first in the in-game picker, tags from
+the top down.
+
 | Piece | Change | What |
 |---|---|---|
-| `Data/images/CAGR/Graphics/grap_1..3.img.xbx` (+ `.orig` backups) | changed / added | custom Create-A-Graphic **"sticker slap"** art (customs show at the top of the Graphics list) |
-| `cagpieces.prx` | +3 KB | the in-editor **thumbnails** for those stickers |
-| `Save/*.GRF` | **added** | custom in-game **tags** — `VioletVandal.GRF` (the persona tag, seeded reproducibly) + your in-game test tags |
+| `Data/images/CAGR/Graphics/<slot>.img.xbx` | changed | your artwork, as the game draws it in the world. One slot per import |
+| `cagpieces.prx` | grows a little | the same artwork again, as the **thumbnail** the in-game editor shows. Both are written, or the picker and the wall would disagree |
+| `Save/*.GRF` | **added** | one **tag** file per imported spray tag, plus `VioletVandal.GRF` (the persona tag, seeded so a fresh build reproduces it) |
+| `revert-cag.json` | **added** | which slot each import holds. This is what lets `revert cag remove` put the original clip-art back exactly |
 | `Save/*.SKA` | **added** | your **created-skater saves** (Custom Skater / Custom Skater 2) |
+
+Add artwork with `revert tag <image> --install` (a spray tag) or `revert sticker <image>
+--install` (a wall slap); leave off `--install` to preview first. `revert gui` has the same
+thing with pictures, under **Clip-Art Studio**. `revert cag list` shows what your imports
+occupy and `revert cag remove <name>` hands a slot back.
 
 ## 6. HQ audio + video (`Data/streams`, `Data/movies`)
 | Piece | Change | What |

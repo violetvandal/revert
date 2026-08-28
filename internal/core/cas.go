@@ -12,9 +12,14 @@ import (
 func pythonExe() string { return lookPathAny("python", "python3") }
 
 // casPostPass runs the optional Python CAS asset steps that live outside thugkit's Go
-// core (texture recolours, licensed deck/model blobs, stickers). Every step is
-// presence-gated and best-effort — the core edition is fully playable without any of
-// them, and without Python at all. Mirrors the bash cas_post_pass.
+// core (texture recolours, licensed deck/model blobs). Every step is presence-gated
+// and best-effort — the core edition is fully playable without any of them, and
+// without Python at all. Mirrors the bash cas_post_pass.
+//
+// Stickers are deliberately NOT here. They share the Create-A-Graphic clip-art pool
+// with custom tags, so both are allocated together by the Go core during the build.
+// Running the old Python pass as well would claim slots the allocator does not know
+// about, which is the bug this pipeline was rebuilt to remove.
 func casPostPass(c *Conf, edition string) {
 	py := pythonExe()
 	if py == "" {
@@ -30,9 +35,6 @@ func casPostPass(c *Conf, edition string) {
 	}
 	if d := c.Path("PLAYAS_BLOB"); dirExists(d) {
 		tryPy(py, filepath.Join(save, "apply_playas_models.py"), edition, d)
-	}
-	if dirExists(filepath.Join(save, "stickers")) {
-		tryPy(py, filepath.Join(save, "apply_stickers.py"), edition)
 	}
 }
 
